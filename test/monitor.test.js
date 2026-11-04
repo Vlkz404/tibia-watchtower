@@ -148,3 +148,34 @@ test('Portuguese notifications and tests use the saved language and preserve cus
   await monitor.testSend('message', 'channels', userId);
   assert.match(sent[2].content, /Settings \{0\} — user content/);
 });
+
+test('channels and opted-in DMs share the selected language for transitions and manual status tests', async (t) => {
+  const { store, client, clock, advance } = setup(t);
+  t.mock.method(Date, 'now', clock);
+  const channels = []; const dms = [];
+  client.channels.fetch = async () => ({ guildId: config.guildId, isSendable: () => true, send: async (payload) => channels.push(payload) });
+  client.users.fetch = async (id) => {
+    assert.equal(id, userId);
+    return { send: async (payload) => dms.push(payload) };
+  };
+  store.update((s) => { s.dmEnabled = true; s.subscribers = [userId]; });
+  let state = 'offline';
+  const monitor = new Monitor(client, config, store, { player: async () => observation(state) }, clock);
+  await monitor.check();
+  for (const [index, language, nextState, heading] of [[0, 'en', 'online', 'Changes detected in Tibia'], [1, 'pt-BR', 'offline', 'Mudanças detectadas no Tibia']]) {
+    store.update((s) => { s.language = language; });
+    state = nextState; advance(); await monitor.check();
+    assert.equal(channels.length, index + 1);
+    assert.equal(dms.length, index + 1);
+    assert.deepEqual(dms[index], channels[index]);
+    assert.ok(dms[index].content.includes(heading));
+    assert.ok(dms[index].content.includes(nextState));
+    assert.match(dms[index].content, /Test Knight/);
+  }
+  await monitor.testSend('status', 'channels', userId);
+  advance(); await monitor.testSend('status', 'dm', userId);
+  assert.deepEqual(dms.at(-1), channels.at(-1));
+  assert.match(dms.at(-1).content, /^\[TESTE/);
+  assert.match(dms.at(-1).content, /Jogadores/);
+  assert.doesNotMatch(dms.at(-1).content, /Changes detected|Players|no actual status change/);
+});
