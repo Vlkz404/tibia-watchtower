@@ -1,6 +1,6 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-export const defaults = () => ({ version: 1, notificationsEnabled: false, channelEnabled: true, dmEnabled: false,
+export const defaults = () => ({ version: 1, source: 'tibiadata', notificationsEnabled: false, channelEnabled: true, dmEnabled: false,
   channelIds: [], subscribers: [], emojis: {}, player: '', world: 'Quelibra', guild: 'Quelibra Pune',
   monitorEnabled: true, pollSeconds: 120, monitorRevision: 0, monitor: { status: 'unknown', checkedAt: null, history: [], error: null } });
 export class Store {

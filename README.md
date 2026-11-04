@@ -78,3 +78,7 @@ The dashboard selects one player in Quelibra / Quelibra Pune. Character details 
 ## TibiaData source
 
 The default source is now TibiaData v5. Character records may omit `status` and `last_login`; the complete world online list determines status. The HTML adapter remains selectable through `config/tibia.js`. Switching sources establishes a silent baseline. World data and character details have different cache durations.
+
+## Query methods and buttons
+
+Navigate with buttons. Choose HTML or TibiaData under Query method; the choice persists. Only HTML exposes an interval control. TibiaData uses per-resource caches and a fixed refresh cadence. Dropdowns are reserved for channel selection.

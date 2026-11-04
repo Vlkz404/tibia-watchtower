@@ -16,3 +16,11 @@ test('settings persist and each user controls their own subscription', (t) => {
   }
   assert.equal(canManage({user:{id:'member'},memberPermissions:new PermissionsBitField()}, {ownerId:'owner'}), false);
 });
+test('navigation uses buttons and only HTML exposes an adjustable interval', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'watchtower-ui-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const s = new Store(dir).get();
+  const api = renderDashboard(s, 'owner', true, 'monitor');
+  assert.ok(api.components[0].toJSON().components.every((c) => c.type === 2));
+  assert.equal(JSON.stringify(api.components).includes('dash:interval'), false);
+  assert.equal(JSON.stringify(renderDashboard({...s,source:'html'}, 'owner', true, 'monitor').components).includes('dash:interval'), true);
+});

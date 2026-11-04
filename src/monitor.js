@@ -1,14 +1,15 @@
+import { SearchService } from './search-service.js';
 import { lookupPlayer, TibiaError } from './tibia.js';
 import { sendNotification } from './notifications.js';
 export const timestamp = (value) => value ? `<t:${Math.floor(Date.parse(value) / 1000)}:F>` : 'not available';
 export function statusText(s) { return `Player: ${s.player || 'not configured'}\nStatus: ${s.monitor.status}\nLast successful query: ${timestamp(s.monitor.checkedAt)}\nLast Login: ${timestamp(s.monitor.lastLogin)}\n${s.monitor.error || 'Change times are approximate detections between queries.'}`; }
 export class Monitor {
-  constructor(client, config, store, lookup = lookupPlayer, clock = Date.now) { Object.assign(this,{client,config,store,lookup,clock}); this.lastAttempt = null; this.busy = false; this.stopped = false; }
+  constructor(client, config, store, lookup = null, clock = Date.now) { Object.assign(this,{client,config,store,lookup,clock}); this.service = new SearchService(); this.lookup = lookup || ((name,s) => this.service.player(name,s.source || 'tibiadata')); this.lastAttempt = null; this.busy = false; this.stopped = false; }
   start() { const tick = async () => { if (this.stopped) return; try { await this.check(); } catch { console.error('Monitoring failed.'); } if (!this.stopped) this.timer = setTimeout(tick,5000); }; void tick(); }
   stop() { this.stopped = true; clearTimeout(this.timer); }
   async check() {
     const s = this.store.get();
-    if (this.stopped || this.busy || !s.player || !s.monitorEnabled || (this.lastAttempt !== null && this.clock()-this.lastAttempt < s.pollSeconds*1000)) return;
+    if (this.stopped || this.busy || !s.player || !s.monitorEnabled || (this.lastAttempt !== null && this.clock()-this.lastAttempt < (s.source === 'html' ? s.pollSeconds : 60)*1000)) return;
     this.busy = true; this.lastAttempt = this.clock();
     try {
       const observation = await this.lookup(s.player,s); const current = this.store.get();
