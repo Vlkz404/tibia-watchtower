@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 export class ConfigError extends Error {}
 
 export function loadConfig(env = process.env) {
@@ -12,27 +13,13 @@ export function loadConfig(env = process.env) {
     }
     return value;
   };
-  const ids = (key) => {
-    const value = env[key]?.trim();
-    if (!value) return [];
-    return [...new Set(value.split(',').map((item) => id(key, item.trim())))];
-  };
   const token = required('DISCORD_TOKEN');
   if (/\s/.test(token)) throw new ConfigError('DISCORD_TOKEN: remove spaces and line breaks.');
-  const dmEnabled = env.DISCORD_DM_ENABLED?.trim() || 'false';
-  if (!['true', 'false'].includes(dmEnabled)) {
-    throw new ConfigError('DISCORD_DM_ENABLED: use true or false.');
-  }
-  const config = {
+  return {
     token,
     clientId: id('DISCORD_CLIENT_ID', required('DISCORD_CLIENT_ID')),
     guildId: id('DISCORD_GUILD_ID', required('DISCORD_GUILD_ID')),
-    channelIds: ids('DISCORD_CHANNEL_IDS'),
-    dmEnabled: dmEnabled === 'true',
-    dmUserIds: ids('DISCORD_DM_USER_IDS'),
+    ownerId: id('DISCORD_OWNER_ID', required('DISCORD_OWNER_ID')),
+    dataDir: env.DATA_DIR?.trim() || fileURLToPath(new URL('../data', import.meta.url)),
   };
-  if (config.dmEnabled && !config.dmUserIds.length) {
-    throw new ConfigError('DISCORD_DM_USER_IDS: configure recipients before enabling DMs.');
-  }
-  return config;
 }

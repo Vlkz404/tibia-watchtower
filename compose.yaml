@@ -5,6 +5,8 @@ services:
     init: true
     restart: unless-stopped
     read_only: true
+    volumes:
+      - bot-data:/app/data
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     logging:
@@ -12,3 +14,5 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+volumes:
+  bot-data:

@@ -7,6 +7,7 @@ const env = {
   DISCORD_TOKEN: 'test-secret-never-log',
   DISCORD_CLIENT_ID: '123456789012345678',
   DISCORD_GUILD_ID: '234567890123456789',
+  DISCORD_OWNER_ID: '456789012345678901',
 };
 
 test('validates required fields without exposing the token', () => {
@@ -15,14 +16,8 @@ test('validates required fields without exposing the token', () => {
     return true;
   });
   assert.throws(() => loadConfig({}), /DISCORD_TOKEN/);
-  assert.throws(() => loadConfig({ ...env, DISCORD_DM_ENABLED: 'yes' }), /true or false/);
-  assert.throws(() => loadConfig({ ...env, DISCORD_DM_ENABLED: 'true' }), /recipients/);
-});
+  assert.throws(() => loadConfig({ ...env, DISCORD_OWNER_ID: '' }), /DISCORD_OWNER_ID/);
 
-test('DMs are disabled by default and IDs remain deduplicated strings', () => {
-  const config = loadConfig({ ...env, DISCORD_CHANNEL_IDS: '345678901234567890,345678901234567890' });
-  assert.equal(config.dmEnabled, false);
-  assert.deepEqual(config.channelIds, ['345678901234567890']);
 });
 
 test('deliveries isolate failures and block mentions and channels from other servers', async () => {

@@ -1,0 +1,67 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+export const canManage = (i, c) => i.user.id === c.ownerId || Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageGuild) || i.memberPermissions?.has(PermissionFlagsBits.ModerateMembers));
+const row = (...items) => new ActionRowBuilder().addComponents(...items);
+const button = (id, label) => new ButtonBuilder().setCustomId('dash:' + id).setLabel(label).setStyle(ButtonStyle.Secondary);
+const pages = { home: 'Overview', notifications: 'Notifications', channels: 'Channels', monitor: 'Monitoring', dm: 'My DMs', emojis: 'Custom emojis' };
+export function renderDashboard(s, userId, manage, page = 'home', notice = '') {
+  if (!manage || !pages[page]) page = manage ? 'home' : 'dm';
+  const menu = new StringSelectMenuBuilder().setCustomId('dash:page').setPlaceholder('Choose a section').addOptions(Object.entries(pages).filter(([key]) => manage || key === 'dm').map(([value, label]) => ({ value, label, default: value === page })));
+  const components = [row(menu)];
+  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(pages[page]).setFooter({ text: 'Tibia Watchtower' });
+  if (page === 'home') embed.setDescription(`Notifications: ${s.notificationsEnabled ? 'enabled' : 'disabled'}\nChannels: ${s.channelIds.length}\nDM subscriptions: ${s.subscribers.length}`);
+  else if (page === 'notifications') {
+    embed.setDescription(`General: ${s.notificationsEnabled}\nChannels: ${s.channelEnabled}\nDMs: ${s.dmEnabled}`);
+    components.push(row(button('toggle:notificationsEnabled', 'Toggle notifications'), button('toggle:channelEnabled', 'Toggle channels'), button('toggle:dmEnabled', 'Toggle DMs')));
+  } else if (page === 'channels') {
+    embed.setDescription(s.channelIds.map((id) => `<#${id}>`).join('\n') || 'No channels configured.');
+    components.push(row(new ChannelSelectMenuBuilder().setCustomId('dash:channels').setPlaceholder('Choose notification channels').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(25)));
+  } else if (page === 'monitor') {
+    embed.setDescription(`Player: ${s.player || 'not configured'}\nMonitoring: ${s.monitor.status}\n${s.monitor.error || 'Monitoring will be connected in the next step.'}`);
+    components.push(row(button('player', 'Choose player')));
+  } else if (page === 'dm') {
+    embed.setDescription(`Your subscription: ${s.subscribers.includes(userId) ? 'enabled' : 'disabled'}\nServer DMs: ${s.dmEnabled ? 'enabled' : 'disabled'}`);
+    components.push(row(button('subscribe', 'Receive DMs'), button('unsubscribe', 'Stop DMs')));
+  } else {
+    embed.setDescription('Use a custom emoji from this server. Themes are not implemented.'); components.push(row(button('emoji', 'Set notification emoji')));
+  }
+  if (notice) embed.addFields({ name: 'Result', value: notice.slice(0, 1000) });
+  return { embeds: [embed], components, allowedMentions: { parse: [] } };
+}
+export const setSubscription = (store, userId, enabled) => store.update((s) => { s.subscribers = s.subscribers.filter((id) => id !== userId); if (enabled) s.subscribers.push(userId); });
+export async function handleDashboard(i, { config, store, monitor }) {
+  if (!i.customId?.startsWith('dash:')) return false;
+  const action = i.customId.slice(5); const manage = canManage(i, config);
+  if (!manage && !['subscribe', 'unsubscribe'].includes(action) && !(action === 'page' && i.values[0] === 'dm')) {
+    await i.reply({ content: 'Only the owner or moderators can change server settings.', flags: MessageFlags.Ephemeral }); return true;
+  }
+  if (['player', 'emoji'].includes(action)) {
+    const field = new TextInputBuilder().setCustomId('value').setLabel(action === 'player' ? 'Player name or official URL' : 'Custom emoji ID').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200);
+    await i.showModal(new ModalBuilder().setCustomId(`dash:${action}-submit`).setTitle(action === 'player' ? 'Monitored player' : 'Custom notification emoji').addComponents(row(field))); return true;
+  }
+  await i.deferUpdate(); let page = 'home'; let notice = '';
+  try {
+    if (action === 'page') page = i.values[0];
+    else if (action === 'subscribe' || action === 'unsubscribe') { setSubscription(store, i.user.id, action === 'subscribe'); page = 'dm'; }
+    else if (action.startsWith('toggle:')) {
+      const key = action.slice(7); if (!['notificationsEnabled','channelEnabled','dmEnabled'].includes(key)) throw new Error('Invalid action.');
+      store.update((s) => { s[key] = !s[key]; }); page = 'notifications';
+    } else if (action === 'channels') {
+      page = 'channels';
+      for (const id of i.values) {
+        const channel = await i.guild.channels.fetch(id);
+        if (channel?.guildId !== config.guildId || !channel.permissionsFor(i.client.user)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) throw new Error('The bot cannot access or send messages in a selected channel.');
+      }
+      store.update((s) => { s.channelIds = [...new Set(i.values)]; });
+    } else if (action === 'player-submit') {
+      page = 'monitor'; let name = i.fields.getTextInputValue('value').trim();
+      if (name.startsWith('https://www.tibia.com/community/')) name = new URL(name).searchParams.get('name') || '';
+      if (!/^[a-zA-Z][a-zA-Z '\-]{1,28}$/.test(name)) throw new Error('Enter a valid player name or official character URL.');
+      store.update((s) => { s.player = name; s.monitor = { status: 'unknown', checkedAt: null, history: [], error: null }; s.monitorRevision++; });
+    } else if (action === 'emoji-submit') {
+      page = 'emojis'; const emoji = await i.guild.emojis.fetch(i.fields.getTextInputValue('value').trim());
+      if (!emoji?.available || emoji.roles.cache.size) throw new Error('Choose an available server emoji without role restrictions.');
+      store.update((s) => { s.emojis.notifications = { id: emoji.id, name: emoji.name, animated: emoji.animated }; });
+    } else throw new Error('Unknown action.');
+  } catch { notice = 'Could not apply this change. Check the input and bot permissions.'; }
+  await i.editReply(renderDashboard(store.get(), i.user.id, manage, page, notice)); return true;
+}

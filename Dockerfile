@@ -4,5 +4,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --chown=node:node src ./src
+RUN mkdir /app/data && chown node:node /app/data
 USER node
 CMD ["node", "src/index.js"]

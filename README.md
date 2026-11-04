@@ -38,6 +38,10 @@ npm start
 
 Keep IDs as strings. `.env` is ignored by Git and excluded from the Docker image. `.env.example` contains placeholders and safe defaults. Do not log the configuration object. `.env` does not encrypt secrets: use your hosting provider's secrets manager in production. If the token is exposed, reset it in the Developer Portal.
 
+## Dashboard
+
+Run `/dashboard` for server settings. The owner or moderators can configure notifications and channels; members manage only their own DM subscription. Configure `DISCORD_OWNER_ID` in the environment. Preferences persist in `data/settings.json`; legacy destination environment variables are no longer used. Tibia monitoring will be connected in a following step.
+
 ## Future notifications
 
 `src/notifications.js` exports `sendNotification(client, config, content)`. It sends only to configured destinations, restricts channels to the configured server, disables automatic mentions, and returns a success/failure result for each destination. A blocked DM does not interrupt other deliveries. Enabling DMs in the environment only enables the service; the future monitor must still call it. This foundation does not retry failed deliveries automatically.
