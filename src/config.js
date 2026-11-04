@@ -3,12 +3,12 @@ export class ConfigError extends Error {}
 export function loadConfig(env = process.env) {
   const required = (key) => {
     const value = env[key]?.trim();
-    if (!value) throw new ConfigError(`${key}: obrigatório.`);
+    if (!value) throw new ConfigError(`${key}: required.`);
     return value;
   };
   const id = (key, value) => {
     if (!/^[1-9]\d{16,19}$/.test(value)) {
-      throw new ConfigError(`${key}: informe um ID Discord válido.`);
+      throw new ConfigError(`${key}: enter a valid Discord ID.`);
     }
     return value;
   };
@@ -18,10 +18,10 @@ export function loadConfig(env = process.env) {
     return [...new Set(value.split(',').map((item) => id(key, item.trim())))];
   };
   const token = required('DISCORD_TOKEN');
-  if (/\s/.test(token)) throw new ConfigError('DISCORD_TOKEN: remova espaços e quebras de linha.');
+  if (/\s/.test(token)) throw new ConfigError('DISCORD_TOKEN: remove spaces and line breaks.');
   const dmEnabled = env.DISCORD_DM_ENABLED?.trim() || 'false';
   if (!['true', 'false'].includes(dmEnabled)) {
-    throw new ConfigError('DISCORD_DM_ENABLED: use true ou false.');
+    throw new ConfigError('DISCORD_DM_ENABLED: use true or false.');
   }
   const config = {
     token,
@@ -32,7 +32,7 @@ export function loadConfig(env = process.env) {
     dmUserIds: ids('DISCORD_DM_USER_IDS'),
   };
   if (config.dmEnabled && !config.dmUserIds.length) {
-    throw new ConfigError('DISCORD_DM_USER_IDS: configure destinatários para ativar DMs.');
+    throw new ConfigError('DISCORD_DM_USER_IDS: configure recipients before enabling DMs.');
   }
   return config;
 }

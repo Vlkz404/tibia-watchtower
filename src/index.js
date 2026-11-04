@@ -9,9 +9,9 @@ try {
     allowedMentions: { parse: [] },
   });
   client.once(Events.ClientReady, (readyClient) => {
-    console.log(`Bot conectado como ${readyClient.user.tag}. Monitoramento Tibia ainda não implementado.`);
+    console.log(`Bot connected as ${readyClient.user.tag}. Tibia monitoring is not implemented yet.`);
   });
-  client.on(Events.Error, () => console.error('Erro na conexão com o Discord.'));
+  client.on(Events.Error, () => console.error('Discord connection error.'));
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand() || interaction.guildId !== config.guildId) return;
     try {
@@ -19,23 +19,23 @@ try {
         await interaction.reply({ content: 'Pong! Bot online.', flags: MessageFlags.Ephemeral });
       } else if (interaction.commandName === 'status') {
         await interaction.reply({
-          content: `Bot online.\nCanais configurados: ${config.channelIds.length}.\nDMs: ${config.dmEnabled ? 'ativadas' : 'desativadas'}.\nMonitoramento Tibia: ainda não implementado.`,
+          content: `Bot online.\nConfigured channels: ${config.channelIds.length}.\nDMs: ${config.dmEnabled ? 'enabled' : 'disabled'}.\nTibia monitoring: not implemented yet.`,
           flags: MessageFlags.Ephemeral,
         });
       }
     } catch {
-      console.error('Falha ao responder comando.');
+      console.error('Failed to respond to command.');
     }
   });
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
-      console.log('Encerrando bot.');
+      console.log('Shutting down bot.');
       client.destroy();
     });
   }
   await client.login(config.token);
 } catch (error) {
-  console.error(error instanceof ConfigError ? error.message : 'Falha ao iniciar o bot. Confira token e conexão com o Discord.');
+  console.error(error instanceof ConfigError ? error.message : 'Failed to start the bot. Check the token and Discord connection.');
   client?.destroy();
   process.exitCode = 1;
 }

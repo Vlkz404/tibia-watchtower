@@ -1,52 +1,52 @@
 # Tibia Discord Bot
 
-Base em JavaScript (ES modules), Node.js 22.12+ e discord.js 14.28.1. Inclui `/ping`, `/status`, configuração por ambiente e um serviço de notificações para integrar depois. A consulta do Tibia ainda não existe; iniciar o bot não dispara notificações.
+A JavaScript foundation using ES modules, Node.js 22.12+, and discord.js 14.28.1. Includes `/ping`, `/status`, environment-based configuration, and a notification service for future integration. Tibia monitoring is not implemented yet; starting the bot does not send notifications.
 
-## Preparar no Discord
+## Discord setup
 
-1. Crie a aplicação no [Developer Portal](https://discord.com/developers/applications).
-2. Em **Bot**, gere o token e coloque somente no `.env` local ou nos secrets da hospedagem. Não envie o token no chat.
-3. Copie **Application ID** de **General Information** para `DISCORD_CLIENT_ID`.
-4. Ative o Modo Desenvolvedor no Discord e copie o ID do servidor para `DISCORD_GUILD_ID`. IDs de canais e usuários vão nas listas correspondentes.
-5. Em **Installation** ou **OAuth2 → URL Generator**, configure instalação no servidor com os escopos `bot` e `applications.commands`. Conceda **View Channels** e **Send Messages** nos canais escolhidos. Não precisa de Administrator ou intents privilegiadas nesta base. Para threads, conceda também Send Messages in Threads e acesso à thread.
-6. Use o link gerado para instalar o bot no servidor configurado.
+1. Create an application in the [Developer Portal](https://discord.com/developers/applications).
+2. Under **Bot**, generate a token and store it only in your local `.env` or your hosting provider's secrets manager. Do not share the token in chat.
+3. Copy the **Application ID** from **General Information** into `DISCORD_CLIENT_ID`.
+4. Enable Developer Mode in Discord and copy the server ID into `DISCORD_GUILD_ID`. Add channel and user IDs to their respective lists.
+5. Under **Installation** or **OAuth2 → URL Generator**, configure a server installation with the `bot` and `applications.commands` scopes. Grant **View Channels** and **Send Messages** in the selected channels. This foundation does not require Administrator or privileged intents. For threads, also grant **Send Messages in Threads** and access to the thread.
+6. Use the generated link to install the bot in the configured server.
 
-## Rodar localmente
+## Run locally
 
 ```bash
 cp .env.example .env
 chmod 600 .env
-# Edite o .env com seus dados antes de continuar.
+# Fill in your local configuration before continuing.
 npm ci
 npm run check:env
 npm run deploy:commands
 npm start
 ```
 
-`check:env` valida o formato sem autenticar ou imprimir credenciais. `deploy:commands` publica os comandos apenas no servidor configurado e substitui os comandos existentes dessa aplicação nesse servidor; execute de novo quando alterar os comandos. `npm run dev` ativa reinício ao editar o código. Variáveis já definidas no ambiente têm prioridade sobre o `.env`.
+`check:env` validates the configuration format without authenticating or printing credentials. `deploy:commands` registers commands only in the configured server and replaces that application's existing commands there; run it again when commands change. `npm run dev` restarts the bot when source files change. Existing environment variables take precedence over `.env` values.
 
-## Variáveis
+## Environment variables
 
-| Variável | Uso |
+| Variable | Purpose |
 | --- | --- |
-| `DISCORD_TOKEN` | Token secreto do bot, obrigatório |
-| `DISCORD_CLIENT_ID` | Application ID, obrigatório |
-| `DISCORD_GUILD_ID` | Servidor autorizado, obrigatório |
-| `DISCORD_CHANNEL_IDS` | Lista de canais separados por vírgula, opcional |
-| `DISCORD_DM_ENABLED` | `true` ou `false`, padrão `false` |
-| `DISCORD_DM_USER_IDS` | Lista de usuários que escolheram receber DMs; obrigatória quando DMs estiverem ativadas |
+| `DISCORD_TOKEN` | Secret bot token; required |
+| `DISCORD_CLIENT_ID` | Application ID; required |
+| `DISCORD_GUILD_ID` | Authorized server ID; required |
+| `DISCORD_CHANNEL_IDS` | Optional comma-separated channel IDs |
+| `DISCORD_DM_ENABLED` | `true` or `false`; defaults to `false` |
+| `DISCORD_DM_USER_IDS` | Users who opted in to DMs; required when DMs are enabled |
 
-Mantenha IDs como texto. `.env` está ignorado pelo Git e excluído da imagem Docker. `.env.example` contém apenas campos vazios. Não registre o objeto de configuração em logs. `.env` não criptografa os segredos: na hospedagem, prefira o gerenciador de secrets. Se o token vazar, redefina-o no portal.
+Keep IDs as strings. `.env` is ignored by Git and excluded from the Docker image. `.env.example` contains placeholders and safe defaults. Do not log the configuration object. `.env` does not encrypt secrets: use your hosting provider's secrets manager in production. If the token is exposed, reset it in the Developer Portal.
 
-## Notificações futuras
+## Future notifications
 
-`src/notifications.js` exporta `sendNotification(client, config, content)`. Ela envia somente aos destinos configurados, restringe canais ao servidor configurado, desativa menções automáticas e retorna sucesso/falha por destino. Uma DM bloqueada não interrompe os demais envios. Ativar DMs no ambiente apenas habilita o serviço; o monitor ainda precisará chamá-lo. Não há retentativa automática nesta base.
+`src/notifications.js` exports `sendNotification(client, config, content)`. It sends only to configured destinations, restricts channels to the configured server, disables automatic mentions, and returns a success/failure result for each destination. A blocked DM does not interrupt other deliveries. Enabling DMs in the environment only enables the service; the future monitor must still call it. This foundation does not retry failed deliveries automatically.
 
-## Hospedagem
+## Hosting
 
-Use um processo contínuo/worker com conexão de saída HTTPS/WebSocket para o Discord. Esta base não abre porta HTTP e não precisa de domínio. Configure os mesmos nomes de variáveis nos secrets da plataforma e execute `npm ci` e `npm start`. Publique os comandos uma vez com `npm run deploy:commands`. Mantenha apenas uma instância para evitar envios duplicados quando o monitor for adicionado.
+Use a continuously running process or worker with outbound HTTPS/WebSocket access to Discord. This foundation does not open an HTTP port or require a domain. Configure the same environment variables in your hosting provider's secrets manager, then run `npm ci` and `npm start`. Register commands once with `npm run deploy:commands`. Run only one instance to avoid duplicate deliveries when monitoring is added.
 
-Com Docker e Compose instalados, após preencher o `.env`:
+With Docker and Compose installed, after configuring `.env`:
 
 ```bash
 docker compose build
@@ -55,14 +55,14 @@ docker compose up -d
 docker compose logs -f --tail=50
 ```
 
-O contêiner roda sem root, recebe o ambiente em runtime, encerra a conexão com SIGTERM e tem rotação de logs. O Dockerfile depende do `package-lock.json` versionado. Para parar: `docker compose down`.
+The container runs as a non-root user, receives environment variables at runtime, closes the connection on SIGTERM, and rotates logs. The Dockerfile requires the committed `package-lock.json`. To stop it, run `docker compose down`.
 
-## Verificar
+## Verification
 
 ```bash
 npm test
 ```
 
-Os testes usam objetos simulados para validar configuração, isolamento de falhas e restrições de envio. Para validar de ponta a ponta, preencha as credenciais, publique os comandos, inicie o bot e execute `/ping` e `/status` no servidor. Ainda falta definir qual status do Tibia será monitorado, frequência de consulta e regra de mudança que gerará os alertas.
+Tests use simulated objects to verify configuration validation, failure isolation, and delivery restrictions. For end-to-end validation, provide credentials, register commands, start the bot, and run `/ping` and `/status` in the server. The Tibia status to monitor, polling frequency, and alert conditions still need to be defined.
 
-Referências: [discord.js](https://discord.js.org/docs/packages/discord.js/14.28.1) e [documentação oficial do Discord](https://discord.com/developers/docs/quick-start/getting-started).
+References: [discord.js](https://discord.js.org/docs/packages/discord.js/14.28.1) and the [official Discord documentation](https://discord.com/developers/docs/quick-start/getting-started).

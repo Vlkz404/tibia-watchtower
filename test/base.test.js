@@ -9,23 +9,23 @@ const env = {
   DISCORD_GUILD_ID: '234567890123456789',
 };
 
-test('valida obrigatórios sem expor o token', () => {
+test('validates required fields without exposing the token', () => {
   assert.throws(() => loadConfig({ ...env, DISCORD_CLIENT_ID: env.DISCORD_TOKEN }), (error) => {
     assert.equal(error.message.includes(env.DISCORD_TOKEN), false);
     return true;
   });
   assert.throws(() => loadConfig({}), /DISCORD_TOKEN/);
-  assert.throws(() => loadConfig({ ...env, DISCORD_DM_ENABLED: 'yes' }), /true ou false/);
-  assert.throws(() => loadConfig({ ...env, DISCORD_DM_ENABLED: 'true' }), /destinatários/);
+  assert.throws(() => loadConfig({ ...env, DISCORD_DM_ENABLED: 'yes' }), /true or false/);
+  assert.throws(() => loadConfig({ ...env, DISCORD_DM_ENABLED: 'true' }), /recipients/);
 });
 
-test('DMs desligadas por padrão e IDs mantidos como strings sem duplicatas', () => {
+test('DMs are disabled by default and IDs remain deduplicated strings', () => {
   const config = loadConfig({ ...env, DISCORD_CHANNEL_IDS: '345678901234567890,345678901234567890' });
   assert.equal(config.dmEnabled, false);
   assert.deepEqual(config.channelIds, ['345678901234567890']);
 });
 
-test('envios isolam falhas, bloqueiam menções e canais de outro servidor', async () => {
+test('deliveries isolate failures and block mentions and channels from other servers', async () => {
   const sent = [];
   const config = { guildId: env.DISCORD_GUILD_ID, channelIds: ['blocked', 'foreign', 'valid'], dmEnabled: true, dmUserIds: ['closed', 'open'] };
   const client = {
@@ -38,12 +38,12 @@ test('envios isolam falhas, bloqueiam menções e canais de outro servidor', asy
       sent.push(payload);
     } }) },
   };
-  const results = await sendNotification(client, config, '@everyone teste');
+  const results = await sendNotification(client, config, '@everyone test');
   assert.deepEqual(results.map((item) => item.ok), [false, false, true, false, true]);
   assert.equal(sent.length, 2);
   for (const payload of sent) assert.deepEqual(payload.allowedMentions, { parse: [] });
   config.dmEnabled = false;
   config.channelIds = [];
-  assert.deepEqual(await sendNotification(client, config, 'teste'), []);
+  assert.deepEqual(await sendNotification(client, config, 'test'), []);
   await assert.rejects(() => sendNotification(client, config, 'x'.repeat(2001)));
 });

@@ -1,7 +1,7 @@
-// Ponto de integração para o futuro monitor do Tibia. Nenhum envio automático no boot.
+// Integration point for the future Tibia monitor. No automatic deliveries on startup.
 export async function sendNotification(client, config, content) {
   if (typeof content !== 'string' || !content.trim() || content.length > 2000) {
-    throw new Error('A notificação deve ter entre 1 e 2000 caracteres.');
+    throw new Error('Notification content must contain between 1 and 2000 characters.');
   }
   const payload = { content, allowedMentions: { parse: [] } };
   const results = [];
@@ -9,7 +9,7 @@ export async function sendNotification(client, config, content) {
     try {
       const channel = await client.channels.fetch(channelId);
       if (!channel || channel.guildId !== config.guildId || !channel.isSendable()) {
-        throw new Error('Canal indisponível.');
+        throw new Error('Channel unavailable.');
       }
       await channel.send(payload);
       results.push({ type: 'channel', id: channelId, ok: true });
