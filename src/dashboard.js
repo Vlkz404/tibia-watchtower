@@ -16,7 +16,7 @@ const button = (id, label, active = false, emoji) => {
 };
 const on = (v) => v ? 'Enabled' : 'Disabled';
 const mark = (status) => status === 'online' ? '🟢' : status === 'offline' ? '🔴' : '⚪';
-const baseEmbed = (title) => new EmbedBuilder().setColor(0x5865f2).setTitle(title).setFooter({ text: 'Tibia Watchtower' });
+const baseEmbed = (title) => new EmbedBuilder().setColor(0x2b2d31).setTitle(title).setFooter({ text: 'Made by VLKZ' });
 
 export function renderStatus(settings, id) {
   const target = settings.players.find((p) => p.id === id || (id && sameName(p.name, id))) || (!id && settings.players.length === 1 ? settings.players[0] : null);

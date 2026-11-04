@@ -136,7 +136,7 @@ test('button navigation, HTML-only interval, footer, and large lists serialize c
   assert.equal(JSON.stringify(html.components.map((r) => r.toJSON())).includes('dash:interval'), true);
   for (const section of ['home', 'players', 'guilds', `player:${settings.players[0].id}`, `guild:${settings.guilds[0].id}:20:all`, `guild:${settings.guilds[0].id}:0:online`]) {
     const view = renderDashboard(settings, userId, true, section);
-    assert.equal(view.embeds[0].toJSON().footer.text, 'Tibia Watchtower');
+    assert.equal(view.embeds[0].toJSON().footer.text, 'Made by VLKZ');
     assert.ok(view.components.length <= 5); assert.ok(view.embeds[0].toJSON().description.length < 4096);
     assert.ok(view.components[0].toJSON().components.every((c) => c.type === 2));
     for (const r of view.components) r.toJSON();

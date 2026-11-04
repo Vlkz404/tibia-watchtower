@@ -11,3 +11,5 @@ The owner or moderators manage server settings. Only the owner or Administrator 
 Settings and the last 100 events per target persist in `data/settings.json`. v1 settings are migrated automatically with a backup. The first sample is silent, guild membership changes are not treated as logouts, and overlapping player/guild targets do not duplicate the same alert in a cycle.
 
 `npm test` verifies the implementation with simulated requests and deliveries. Live availability and cache freshness depend on the source; HTML requests may receive HTTP 403. Detection times are approximate. There is no persistent retry queue.
+
+Status and dashboard views use compact embeds, muted styling, clickable official character/guild titles, and a discreet `Made by VLKZ` footer.
