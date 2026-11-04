@@ -1,3 +1,4 @@
+import { lookupApiPlayer } from './tibiadata.js';
 import { load } from 'cheerio';
 import { tibiaSearch } from '../config/tibia.js';
 
@@ -90,5 +91,6 @@ export async function lookupHtmlPlayer(name, settings, fetcher = fetch) {
 }
 
 export async function lookupPlayer(name, settings, fetcher = fetch) {
+  if ((settings.source || tibiaSearch.source) === 'tibiadata') return lookupApiPlayer(name, settings, fetcher);
   return lookupHtmlPlayer(name, settings, fetcher);
 }

@@ -74,3 +74,7 @@ References: [discord.js](https://discord.js.org/docs/packages/discord.js/14.28.1
 ## HTML monitoring
 
 The dashboard selects one player in Quelibra / Quelibra Pune. Character details use POST; the complete world online list determines online/offline. Endpoints and methods live in `config/tibia.js`. HTTP errors preserve the last state instead of generating offline alerts. Detected times are approximate; the first sample is silent. Last Login is optional and is not used alone to infer status.
+
+## TibiaData source
+
+The default source is now TibiaData v5. Character records may omit `status` and `last_login`; the complete world online list determines status. The HTML adapter remains selectable through `config/tibia.js`. Switching sources establishes a silent baseline. World data and character details have different cache durations.

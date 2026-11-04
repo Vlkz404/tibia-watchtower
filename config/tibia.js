@@ -2,8 +2,13 @@
 // The executor safely encodes {name} and {world} placeholders.
 export const tibiaSearch = {
   // Use 'tibiadata' for public JSON or 'html' for the official website.
-  source: 'html',
-
+  source: 'tibiadata',
+  api: {
+    cacheSeconds: { character: 300, world: 60, guild: 120 },
+    character: { url: 'https://api.tibiadata.com/v5/character/{name}', method: 'GET' },
+    world: { url: 'https://api.tibiadata.com/v5/world/{world}', method: 'GET' },
+    guild: { url: 'https://api.tibiadata.com/v5/guild/{guild}', method: 'GET' },
+  },
   character: {
     url: 'https://www.tibia.com/community/',
     method: 'POST',

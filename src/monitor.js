@@ -14,7 +14,7 @@ export class Monitor {
       const observation = await this.lookup(s.player,s); const current = this.store.get();
       if (this.stopped || current.monitorRevision !== s.monitorRevision || !current.monitorEnabled) return;
       const now = new Date(this.clock()).toISOString();
-      const changed = current.monitor.status !== 'unknown' && current.monitor.status !== observation.status;
+      const changed = (!observation.source || current.monitor.source === observation.source) && current.monitor.status !== 'unknown' && current.monitor.status !== observation.status;
       this.store.update((next) => { next.monitor = {...current.monitor,...observation,checkedAt:now,error:null,history:changed ? [...current.monitor.history,{status:observation.status,at:now,from:current.monitor.checkedAt}].slice(-100) : current.monitor.history}; });
       if (changed && current.notificationsEnabled) await sendNotification(this.client,{guildId:this.config.guildId,channelIds:current.channelEnabled ? current.channelIds : [],dmEnabled:current.dmEnabled,dmUserIds:current.subscribers},`${observation.name}: ${observation.status}\nDetected: ${timestamp(now)}\nPrevious observation: ${timestamp(current.monitor.checkedAt)}`);
     } catch(error) { if (!this.stopped && this.store.get().monitorRevision === s.monitorRevision) this.store.update((next) => { next.monitor.error = error instanceof TibiaError ? error.message : 'Query failed; last status preserved.'; }); }
