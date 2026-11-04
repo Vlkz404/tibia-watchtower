@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from '
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tibiaSearch } from '../config/tibia.js';
+import { languages } from './i18n.js';
 import { assertSafeText, SecurityError } from './security.js';
 
 export const emptyMonitor = () => ({ status: 'unknown', checkedAt: null, changedAt: null, lastLogin: null,
@@ -9,7 +10,7 @@ export const emptyMonitor = () => ({ status: 'unknown', checkedAt: null, changed
 export const playerTarget = (name, monitor = emptyMonitor()) => ({ id: randomUUID(), name, monitor });
 export const guildTarget = (name) => ({ id: randomUUID(), name, world: null, members: [], checkedAt: null, observedAt: null, source: null, error: null, history: [] });
 export const defaults = () => ({
-  version: 2, source: tibiaSearch.source, monitorEnabled: true, notificationsEnabled: false,
+  version: 2, language: 'en', source: tibiaSearch.source, monitorEnabled: true, notificationsEnabled: false,
   channelEnabled: true, dmEnabled: false, onlineAlerts: true, offlineAlerts: true,
   channelIds: [], subscribers: [], players: [], guilds: [], pollSeconds: 120,
   monitorRevision: 0, emojis: {}, delivery: null,
@@ -26,6 +27,7 @@ function migrate(raw) {
   return next;
 }
 function validate(data) {
+  if (!languages.includes(data.language)) throw new Error('Unsupported interface language.');
   if (data.version !== 2 || !['html', 'tibiadata'].includes(data.source)) throw new Error('Unsupported data version or source.');
   for (const key of ['monitorEnabled', 'notificationsEnabled', 'channelEnabled', 'dmEnabled', 'onlineAlerts', 'offlineAlerts']) {
     if (typeof data[key] !== 'boolean') throw new Error('Invalid persisted settings.');
@@ -53,7 +55,7 @@ export class Store {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     this.path = join(directory, 'settings.json');
     const raw = existsSync(this.path) ? JSON.parse(readFileSync(this.path, 'utf8')) : defaults();
-    this.data = migrate(raw);
+    this.data = { ...migrate(raw), language: raw.language ?? 'en' };
     assertSafeText(JSON.stringify(this.data));
     validate(this.data);
     if (raw.version === 1) {

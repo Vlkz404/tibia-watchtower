@@ -3,6 +3,7 @@ import { chmodSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ConfigError, loadConfig } from './config.js';
 import { interactionErrorDetails } from './diagnostics.js';
+import { translator } from './i18n.js';
 import { Store } from './store.js';
 import { Monitor } from './monitor.js';
 import { acquireInstance, InstanceError } from './instance-lock.js';
@@ -49,15 +50,16 @@ try {
   client.on(Events.Error, () => console.error('Discord connection error.'));
   client.on(Events.InteractionCreate, async (i) => {
     if (closing || !lease.valid || i.guildId !== config.guildId || (!i.isChatInputCommand() && !i.customId?.startsWith('dash:'))) return;
+    const tr = translator(store.get());
     const ticket = guard.enter(i.user.id, i.customId === 'dash:panic' && canTest(i, config));
     if (!ticket.allowed) {
-      if (ticket.notify) try { await i.reply({ content: 'Too many consecutive actions. Wait a few seconds.', flags: MessageFlags.Ephemeral }); } catch { /* expired interaction */ }
+      if (ticket.notify) try { await i.reply({ content: tr('Too many consecutive actions. Wait a few seconds.'), flags: MessageFlags.Ephemeral }); } catch { /* expired interaction */ }
       return;
     }
     try {
       if (await handleDashboard(i, { config, store, monitor })) return;
       if (!i.isChatInputCommand()) return;
-      if (i.commandName === 'ping') await i.reply({ content: 'Pong! Bot online.', flags: MessageFlags.Ephemeral });
+      if (i.commandName === 'ping') await i.reply({ content: tr('Pong! Bot online.'), flags: MessageFlags.Ephemeral });
       else if (i.commandName === 'dashboard') await i.reply({ ...renderDashboard(store.get(), i.user.id, canManage(i, config), 'home', '', canTest(i, config)), flags: MessageFlags.Ephemeral });
       else if (i.commandName === 'notifications') {
         const action = i.options.getString('action', true);
@@ -67,7 +69,7 @@ try {
     } catch (error) {
       console.error('Failed to respond to interaction.', interactionErrorDetails(error));
       try {
-        const payload = { content: 'Could not complete the action. Open /dashboard again.', flags: MessageFlags.Ephemeral };
+        const payload = { content: translator(store.get())('Could not complete the action. Open /dashboard again.'), flags: MessageFlags.Ephemeral };
         if (i.deferred || i.replied) await i.followUp(payload); else await i.reply(payload);
       } catch { /* handle the error without exposing the raw response */ }
     } finally { ticket.release(); }

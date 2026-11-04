@@ -19,7 +19,7 @@
 
 ## English
 
-Tibia Watchtower monitors public Tibia character and guild data and sends configurable Discord alerts. Manage it through a private dashboard with buttons, custom emojis, and dropdowns only when a list needs a selection. All bot messages and source comments are in English; this README is bilingual.
+Tibia Watchtower monitors public Tibia character and guild data and sends configurable Discord alerts. Manage it through a private dashboard with category menus, Back buttons, and custom emojis. Choose English or Brazilian Portuguese for the interface and notifications; slash commands and source comments remain in English.
 
 ### Features
 
@@ -33,7 +33,8 @@ Tibia Watchtower monitors public Tibia character and guild data and sends config
 | Persistence | Settings, subscriptions, rosters, and the last 100 transitions per target |
 | Access control | Owner/moderator settings and owner/Administrator delivery tests |
 | Protection | Instance locks, interaction and delivery limits, credential checks, and emergency stop |
-| Appearance | Compact status cards, custom server emojis, and a discreet **Made by VLKZ** footer |
+| Appearance | Category navigation, Back buttons, compact status cards, custom emojis, and a discreet **Made by VLKZ** footer |
+| Language | English or Brazilian Portuguese, saved per server through Settings → Language |
 
 Themes are not implemented. Detection times are approximate and depend on polling and source caches.
 
@@ -95,9 +96,11 @@ Open a new dashboard after updating the bot; older messages may contain obsolete
 - **Alerts:** master switch, channel/DM switches, online/offline event filters, and latest delivery result.
 - **Monitoring → Players:** add names or official character URLs, one per line; inspect state, timestamps, and recent history.
 - **Monitoring → Guilds:** add names or official guild URLs, one per line; browse complete rosters with filters and pagination.
-- **Monitoring → Query method:** choose TibiaData or official HTML. Only HTML exposes a polling interval control.
+- **Settings → Query method:** choose TibiaData or official HTML. Only HTML exposes a polling interval control under Monitoring.
 - **My DMs:** opt in or out personally. Discord privacy settings can prevent delivery.
-- **Settings:** channels, custom emojis, and restricted delivery tests and security controls.
+- **Settings:** channels, custom emojis, language, and restricted delivery tests and security controls.
+
+Use the category menu to switch sections and **Back** to return to the parent screen. **Settings → Language → Português BR** changes buttons, menus, forms, status cards, and alerts for everyone in this server, including opted-in DMs. The choice survives restarts; existing settings default to English. Names, custom messages, and slash command names are preserved.
 
 Choosing channels replaces the entire destination list. Duplicate target names are ignored; removing a target requires confirmation and removes its stored history. Notification DMs require both the server's DM/master switches and the recipient's personal opt-in. Mentions are disabled.
 
@@ -138,6 +141,7 @@ The first sample and the first sample after changing sources are silent baseline
 | `src/search-service.js` | Shared requests and per-resource caching |
 | `src/monitor.js` | Observations, transitions, grouped alerts, and manual tests |
 | `src/dashboard.js` | Views, components, forms, and authorization |
+| `src/i18n.js` / `src/locales/pt-BR.js` | Interface translations and safe interpolation |
 | `src/store.js` | Atomic settings persistence and migration |
 | `src/instance-lock.js` / `src/security.js` | Instance ownership, credential checks, and abuse limits |
 
@@ -203,7 +207,7 @@ Automated tests use simulated requests/deliveries for authorization, migration, 
 
 ## Português BR
 
-O Tibia Watchtower acompanha dados públicos de personagens e guilds do Tibia e envia alertas configuráveis no Discord. A dashboard privada usa botões, emojis personalizados e dropdowns quando é necessário escolher itens de uma lista. Os textos do bot e os comentários do código ficam em inglês; este README é bilíngue.
+O Tibia Watchtower acompanha dados públicos de personagens e guilds do Tibia e envia alertas configuráveis no Discord. A dashboard privada usa menus de categorias, botões de Voltar e emojis personalizados. A interface e as notificações podem ficar em inglês ou português brasileiro; os comandos e os comentários do código continuam em inglês.
 
 ### Funcionalidades
 
@@ -217,7 +221,8 @@ O Tibia Watchtower acompanha dados públicos de personagens e guilds do Tibia e 
 | Persistência | Preferências, adesões, membros e as últimas 100 transições por alvo |
 | Permissões | Configurações para dono/moderação; testes para dono/Administrador |
 | Proteções | Travas de instância, limites de uso/envio, bloqueio de credenciais e parada de emergência |
-| Visual | Cards compactos, emojis do servidor e rodapé discreto **Made by VLKZ** |
+| Visual | Menus de categorias, botão Voltar, cards compactos, emojis do servidor e rodapé discreto **Made by VLKZ** |
+| Idioma | Inglês ou português brasileiro, salvo por servidor em Configurações → Idioma |
 
 Temas não estão implementados. Os horários são detecções aproximadas e dependem das consultas e do cache da fonte.
 
@@ -279,11 +284,13 @@ Abra uma dashboard nova após atualizar o bot: mensagens antigas podem ter contr
 - **Alerts:** chave geral, canais/DMs, filtros de entrada/saída e resultado da última entrega.
 - **Monitoring → Players:** nomes ou URLs oficiais, um por linha; estado, horários e histórico recente.
 - **Monitoring → Guilds:** nomes ou URLs oficiais, um por linha; membros com filtros e paginação.
-- **Monitoring → Query method:** TibiaData ou HTML oficial. Somente o HTML mostra ajuste de intervalo.
+- **Settings → Query method:** TibiaData ou HTML oficial. Somente o HTML mostra ajuste de intervalo em Monitoramento.
 - **My DMs:** adesão ou cancelamento individual. A privacidade do Discord pode impedir a entrega.
-- **Settings:** canais, emojis e controles restritos de testes e segurança.
+- **Settings:** canais, emojis, idioma e controles restritos de testes e segurança.
 
 Escolher canais substitui toda a lista anterior. Alvos duplicados são ignorados; remover um alvo exige confirmação e remove seu histórico salvo. DMs automáticas exigem chave geral, chave de DMs e adesão pessoal. Menções automáticas são desativadas.
+
+Use o menu de categorias para mudar de seção e **Voltar** para retornar à tela anterior. Em **Settings → Language → Português BR**, altere botões, menus, formulários, cards de status e alertas para todo o servidor, incluindo DMs com adesão. Depois da troca, o caminho aparece como **Configurações → Idioma**. O idioma fica salvo após reiniciar; configurações antigas começam em inglês. Nomes, mensagens personalizadas e nomes dos comandos são preservados.
 
 Para emojis, selecione uma chave e informe o ID ou `<:nome:id>` de um emoji do servidor, disponível sem restrição de cargos. Chaves: `home`, `notifications`, `channels`, `monitor`, `dm`, `emojis`, `online` e `offline`. Use `reset` para um ícone ou restaure todos os padrões. A fonte e a cor cinza do rodapé são definidas pelo Discord.
 
@@ -322,6 +329,7 @@ A primeira amostra e a primeira após trocar de fonte são referências silencio
 | `src/search-service.js` | Compartilhamento e cache por recurso |
 | `src/monitor.js` | Amostras, transições, alertas agrupados e testes manuais |
 | `src/dashboard.js` | Telas, componentes, formulários e autorização |
+| `src/i18n.js` / `src/locales/pt-BR.js` | Traduções da interface e interpolação segura |
 | `src/store.js` | Persistência atômica e migração |
 | `src/instance-lock.js` / `src/security.js` | Travas, verificações de credenciais e limites contra abuso |
 

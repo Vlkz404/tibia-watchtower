@@ -69,7 +69,8 @@ test('all screens and commands serialize within Discord limits', () => {
   assert.equal(commands.length, 5);
   assert.equal(commands.find((c) => c.name === 'notifications').options[0].required, true);
   const personal = renderDashboard(settings, userId, false, 'notifications');
-  assert.equal(personal.components[0].toJSON().components[0].type, 2);
+  assert.equal(personal.components[0].toJSON().components[0].type, 3);
+  assert.deepEqual(personal.components[0].toJSON().components[0].options.map((o) => o.value), ['home', 'dm']);
   assert.equal(personal.embeds[0].toJSON().title, 'My DMs');
 });
 
@@ -126,7 +127,7 @@ test('delivery tests are hidden from moderators and reject forged clicks', async
   assert.equal(called, 1);
 });
 
-test('button navigation, HTML-only interval, footer, and large lists serialize correctly', (t) => {
+test('category navigation, HTML-only interval, footer, and large lists serialize correctly', (t) => {
   const { store } = setup(t); addTargets(store, 'players', 'Test Knight\nOther Knight'); addTargets(store, 'guilds', 'Test Guild\nOther Guild');
   store.update((s) => { s.guilds[0].members = Array.from({ length: 412 }, (_, n) => ({ name: `Member ${n}`, status: n % 2 ? 'online' : 'offline', level: n + 1, vocation: 'Elder Druid' })); });
   const settings = store.get();
@@ -138,7 +139,7 @@ test('button navigation, HTML-only interval, footer, and large lists serialize c
     const view = renderDashboard(settings, userId, true, section);
     assert.equal(view.embeds[0].toJSON().footer.text, 'Made by VLKZ');
     assert.ok(view.components.length <= 5); assert.ok(view.embeds[0].toJSON().description.length < 4096);
-    assert.ok(view.components[0].toJSON().components.every((c) => c.type === 2));
+    assert.equal(view.components[0].toJSON().components[0].type, 3);
     for (const r of view.components) r.toJSON();
   }
 });
@@ -175,12 +176,14 @@ test('dashboard component IDs are unique across navigation, refresh, filters, an
   const guild = guildTarget('Test Guild');
   guild.members = Array.from({ length: 81 }, (_, n) => ({ name: `Member ${n}`, status: n % 2 ? 'online' : 'offline', level: 100, vocation: 'Knight' }));
   settings.guilds = [guild, guildTarget('Other Guild')];
-  const pages = ['home', 'notifications', 'channels', 'monitor', 'methods', 'players', 'guilds', 'dm', 'settings', 'security', 'emojis', 'tests', `player:${settings.players[0].id}`];
+  const pages = ['home', 'notifications', 'channels', 'monitor', 'methods', 'players', 'guilds', 'dm', 'settings', 'security', 'emojis', 'tests', 'language', `player:${settings.players[0].id}`];
   for (const filter of ['all', 'online', 'offline']) for (const page of [0, 1, 2, 4, 99]) pages.push(`guild:${guild.id}:${page}:${filter}`);
-  for (const source of ['html', 'tibiadata']) for (const admin of [false, true]) for (const page of pages) {
-    const view = renderDashboard({ ...settings, source }, userId, true, page, '', admin);
+  for (const language of ['en', 'pt-BR']) for (const source of ['html', 'tibiadata']) for (const admin of [false, true]) for (const page of pages) {
+    const view = renderDashboard({ ...settings, source, language }, userId, true, page, '', admin);
     const ids = view.components.flatMap((r) => r.toJSON().components.map((c) => c.custom_id));
     assert.equal(new Set(ids).size, ids.length, `${page}: repeated component ID`);
+    assert.ok(view.components.length <= 5, `${page}: too many rows`);
+    for (const item of view.components) item.toJSON();
     assert.ok(ids.every((id) => id.length <= 100));
   }
 });
@@ -210,4 +213,72 @@ test('refresh and pagination buttons keep the selected guild and filter', async 
   const i = interaction(refresh.custom_id, [PermissionFlagsBits.ManageGuild]);
   await handleDashboard(i, { store, config });
   assert.equal(i.response.embeds[0].toJSON().title, 'Tibia monitoring');
+});
+
+test('category menus and back buttons navigate settings, monitoring, and personal DMs', async (t) => {
+  const { store } = setup(t);
+  const navigate = async (customId, value, permissions = [PermissionFlagsBits.ManageGuild]) => {
+    const i = interaction(customId, permissions); i.values = value ? [value] : [];
+    await handleDashboard(i, { store, config });
+    return i.response;
+  };
+  let view = await navigate('dash:category', 'settings');
+  assert.equal(view.embeds[0].toJSON().title, 'Settings');
+  assert.ok(view.components.flatMap((r) => r.toJSON().components).some((c) => c.custom_id === 'dash:back:home'));
+  view = await navigate('dash:settings-section', 'language');
+  assert.equal(view.embeds[0].toJSON().title, 'Language');
+  view = await navigate('dash:back:settings');
+  assert.equal(view.embeds[0].toJSON().title, 'Settings');
+  view = await navigate('dash:category', 'monitor');
+  assert.equal(view.embeds[0].toJSON().title, 'Monitoring');
+  view = await navigate('dash:monitor-section', 'players');
+  assert.equal(view.embeds[0].toJSON().title, 'Players');
+  view = await navigate('dash:back:monitor');
+  assert.equal(view.embeds[0].toJSON().title, 'Monitoring');
+  view = await navigate('dash:category', 'dm', []);
+  assert.equal(view.embeds[0].toJSON().title, 'My DMs');
+  view = await navigate('dash:back:home', null, []);
+  assert.equal(view.embeds[0].toJSON().title, 'Tibia monitoring');
+});
+
+test('language selection persists and immediately translates controls, notices, modals, and errors', async (t) => {
+  const { directory, store } = setup(t);
+  const choose = interaction('dash:language', [PermissionFlagsBits.ManageGuild]); choose.values = ['pt-BR'];
+  await handleDashboard(choose, { store, config });
+  assert.equal(new Store(directory).get().language, 'pt-BR');
+  assert.equal(choose.response.embeds[0].toJSON().title, 'Idioma');
+  assert.equal(choose.response.embeds[0].toJSON().fields[0].value, 'Idioma salvo.');
+  assert.ok(choose.response.components.flatMap((r) => r.toJSON().components).some((c) => c.label === 'Voltar'));
+  const modal = interaction('dash:add:players', [PermissionFlagsBits.ManageGuild]);
+  await handleDashboard(modal, { store, config });
+  assert.equal(modal.modal.title, 'Adicionar jogadores');
+  assert.equal(modal.modal.components[0].components[0].label, 'Um nome ou URL oficial por linha');
+  const denied = interaction('dash:language'); denied.values = ['en'];
+  await handleDashboard(denied, { store, config });
+  assert.match(denied.response.content, /Apenas o dono/);
+  assert.equal(store.get().language, 'pt-BR');
+  const invalid = interaction('dash:language', [PermissionFlagsBits.ManageGuild]); invalid.values = ['unknown'];
+  await handleDashboard(invalid, { store, config });
+  assert.equal(store.get().language, 'pt-BR');
+  assert.equal(invalid.response.embeds[0].toJSON().fields.at(-1).value, 'Idioma inválido.');
+  choose.values = ['en']; await handleDashboard(choose, { store, config });
+  assert.equal(choose.response.embeds[0].toJSON().title, 'Language');
+});
+
+test('new menus recheck moderation and administrator permissions', async (t) => {
+  const { store } = setup(t);
+  for (const [customId, value] of [['dash:category', 'settings'], ['dash:settings-section', 'language'], ['dash:language', 'pt-BR'], ['dash:monitor-section', 'players'], ['dash:back:settings', null]]) {
+    const i = interaction(customId); i.values = [value];
+    await handleDashboard(i, { store, config });
+    assert.match(i.response.content, /Only the owner/);
+    assert.deepEqual(store.get(), defaults());
+  }
+  for (const value of ['tests', 'security']) {
+    const i = interaction('dash:settings-section', [PermissionFlagsBits.ManageGuild]); i.values = [value];
+    await handleDashboard(i, { store, config });
+    assert.match(i.response.content, /Administrator/);
+  }
+  const settings = renderDashboard(store.get(), userId, true, 'settings');
+  const options = settings.components.flatMap((r) => r.toJSON().components).find((c) => c.custom_id === 'dash:settings-section').options;
+  assert.equal(options.some((o) => ['tests', 'security'].includes(o.value)), false);
 });

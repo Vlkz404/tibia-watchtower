@@ -2,8 +2,9 @@ import { TibiaError } from './tibia.js';
 import { SearchService } from './search-service.js';
 import { sendNotification } from './notifications.js';
 import { iconText } from './icons.js';
+import { translator, errorText } from './i18n.js';
 
-export const timestamp = (date, style = 'F') => date ? `<t:${Math.floor(new Date(date).getTime() / 1000)}:${style}>` : 'not recorded yet';
+export const timestamp = (date, style = 'F', settings = {}) => date ? `<t:${Math.floor(new Date(date).getTime() / 1000)}:${style}>` : translator(settings)('not recorded yet');
 
 export function applyObservation(previous, observation, now) {
   if (previous.source === observation.source && previous.observedAt && observation.observedAt && Date.parse(observation.observedAt) <= Date.parse(previous.observedAt)) return { next: { ...previous, checkedAt: now, error: null }, event: null };
@@ -24,27 +25,30 @@ export function applyObservation(previous, observation, now) {
   return { next, event };
 }
 
-export function playerText(target) {
+export function playerText(target, settings = {}) {
+  const tr = translator(settings);
   const m = target.monitor;
+  const time = (date, style = 'F') => timestamp(date, style, settings);
   return [
-    `**Status:** ${m.status === 'unknown' ? '⚪ no sample' : m.status === 'online' ? '🟢 online' : '🔴 offline'}`,
-    `**World / guild:** ${m.world || 'waiting for a query'} / ${m.guild || 'not provided'}`,
-    `**Checked:** ${timestamp(m.checkedAt)} ${m.checkedAt ? `(${timestamp(m.checkedAt, 'R')})` : ''}`,
-    `**Last Login:** ${m.lastLogin ? `${timestamp(m.lastLogin)} (${timestamp(m.lastLogin, 'R')})` : 'not provided'}`,
-    `**Login detected:** ${m.lastOnline ? timestamp(m.lastOnline) : 'no transition observed'}`,
-    `**Logout detected:** ${m.lastOffline ? timestamp(m.lastOffline) : 'no transition observed'}`,
-    m.observedAt ? `**Source sample:** ${timestamp(m.observedAt)}` : '',
-    m.error ? `⚠️ ${m.error} Last status may be outdated.` : '',
-    'Login/logout times are detections between queries, subject to source caching.',
+    tr`**Status:** ${m.status === 'unknown' ? tr('⚪ no sample') : m.status === 'online' ? '🟢 online' : '🔴 offline'}`,
+    tr`**World / guild:** ${m.world || tr('waiting for a query')} / ${m.guild || tr('not provided')}`,
+    tr`**Checked:** ${time(m.checkedAt)} ${m.checkedAt ? `(${time(m.checkedAt, 'R')})` : ''}`,
+    tr`**Last Login:** ${m.lastLogin ? `${time(m.lastLogin)} (${time(m.lastLogin, 'R')})` : tr('not provided')}`,
+    tr`**Login detected:** ${m.lastOnline ? time(m.lastOnline) : tr('no transition observed')}`,
+    tr`**Logout detected:** ${m.lastOffline ? time(m.lastOffline) : tr('no transition observed')}`,
+    m.observedAt ? tr`**Source sample:** ${time(m.observedAt)}` : '',
+    m.error ? tr`⚠️ ${errorText(settings, m.error)} Last status may be outdated.` : '',
+    tr('Login/logout times are detections between queries, subject to source caching.'),
   ].filter(Boolean).join('\n');
 }
 export function statusText(settings) {
+  const tr = translator(settings);
   return [
-    `**Source:** ${settings.source === 'html' ? 'Official HTML' : 'TibiaData'}. Monitoring ${settings.monitorEnabled ? 'active' : 'paused'}.`,
-    `**Players:** ${settings.players.length} • **Guilds:** ${settings.guilds.length}`,
-    ...settings.players.slice(0, 10).map((p) => `${p.monitor.status === 'online' ? '🟢' : p.monitor.status === 'offline' ? '🔴' : '⚪'} **${p.name}**${p.monitor.error ? ' ⚠️ query unavailable' : ''}`),
-    ...settings.guilds.slice(0, 5).map((g) => `🏰 **${g.name}**: ${g.members.filter((m) => m.status === 'online').length} online / ${g.members.length} members${g.error ? ' ⚠️ query unavailable' : ''}`),
-    'Open /dashboard → Monitoring for details and full lists.',
+    tr`**Source:** ${settings.source === 'html' ? tr('Official HTML') : 'TibiaData'}. Monitoring ${tr(settings.monitorEnabled ? 'active' : 'paused')}.`,
+    tr`**Players:** ${settings.players.length} • **Guilds:** ${settings.guilds.length}`,
+    ...settings.players.slice(0, 10).map((p) => `${p.monitor.status === 'online' ? '🟢' : p.monitor.status === 'offline' ? '🔴' : '⚪'} **${p.name}**${p.monitor.error ? tr(' ⚠️ query unavailable') : ''}`),
+    ...settings.guilds.slice(0, 5).map((g) => tr`🏰 **${g.name}**: ${g.members.filter((m) => m.status === 'online').length} online / ${g.members.length} members${g.error ? tr(' ⚠️ query unavailable') : ''}`),
+    tr('Open /dashboard → Monitoring for details and full lists.'),
   ].join('\n');
 }
 
@@ -132,11 +136,12 @@ export class Monitor {
       const latest = this.store.get();
       const events = [...pending.values()].filter((event) => latest[event.kind].some((t) => t.id === event.id) && (event.status === 'online' ? latest.onlineAlerts : latest.offlineAlerts));
       if (events.length && this.current(settings) && latest.notificationsEnabled) {
-        const lines = events.map((e) => `${iconText(latest, e.status)} **${e.name}** ${e.status} • ${e.guild || e.world} • detected ${timestamp(e.at, 't')}`);
-        let text = '**Changes detected in Tibia**\n'; let shown = 0;
+        const tr = translator(latest);
+        const lines = events.map((e) => tr`${iconText(latest, e.status)} **${e.name}** ${tr(e.status)} • ${e.guild || e.world} • detected ${timestamp(e.at, 't', latest)}`);
+        let text = tr('**Changes detected in Tibia**\n'); let shown = 0;
         for (const line of lines) { if (text.length + line.length > 1650) break; text += `${line}\n`; shown++; }
-        if (shown < lines.length) text += `+ ${lines.length - shown} changes; see dashboard history.\n`;
-        text += 'Approximate times between queries; data is subject to source caching.';
+        if (shown < lines.length) text += tr`+ ${lines.length - shown} changes; see dashboard history.\n`;
+        text += tr('Approximate times between queries; data is subject to source caching.');
         const current = () => this.deliveryConfig(this.current(settings));
         const results = await sendNotification(this.client, current(), text, current);
         if (this.current(settings)) this.store.update((s) => { s.delivery = { at: new Date(this.clock()).toISOString(), sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length }; });
@@ -153,9 +158,11 @@ export class Monitor {
     const settings = this.store.get();
     if (destination === 'channels' && !settings.channelIds.length) throw new TibiaError('Configure at least one channel before testing.');
     this.testUntil = this.clock() + 30000;
-    const text = `[TEST — no actual status change]\n${kind === 'status' ? statusText(settings) : settings.testMessage}`.slice(0, 2000);
+    const tr = translator(settings);
+    const message = kind === 'status' ? statusText(settings) : settings.testMessage === 'Bot test message. Notification destinations are working.' ? tr(settings.testMessage) : settings.testMessage;
+    const text = (tr('[TEST — no actual status change]\n') + message).slice(0, 2000);
     const current = () => ({ guildId: this.config.guildId, channelIds: !this.stopped && destination === 'channels' ? this.store.get().channelIds : [], dmEnabled: !this.stopped && destination === 'dm', dmUserIds: destination === 'dm' ? [userId] : [] });
     const results = await sendNotification(this.client, current(), text, current);
-    return `Test: ${results.filter((r) => r.ok).length} sent, ${results.filter((r) => !r.ok).length} failed. ${destination === 'dm' ? 'The test DM was addressed only to you.' : ''}`;
+    return tr`Test: ${results.filter((r) => r.ok).length} sent, ${results.filter((r) => !r.ok).length} failed. ${destination === 'dm' ? tr('The test DM was addressed only to you.') : ''}`;
   }
 }

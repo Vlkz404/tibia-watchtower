@@ -130,3 +130,21 @@ test('opt-out during fetch and leaving the server prevent DMs', async () => {
   current = { ...current, dmUserIds: [userId] }; client.guilds.fetch = async () => ({ members: { fetch: async () => { throw new Error('left'); } } });
   assert.equal((await sendNotification(client, current, 'test'))[0].ok, false); assert.equal(sent, 0);
 });
+
+test('Portuguese notifications and tests use the saved language and preserve custom message text', async (t) => {
+  const { store, sent, client, clock, advance } = setup(t);
+  store.update((s) => { s.language = 'pt-BR'; });
+  let state = 'offline';
+  const monitor = new Monitor(client, config, store, { player: async () => observation(state) }, clock);
+  await monitor.check(); state = 'online'; advance(); await monitor.check();
+  assert.match(sent[0].content, /Mudanças detectadas no Tibia/);
+  assert.match(sent[0].content, /detectado/);
+  assert.match(sent[0].content, /Test Knight/);
+  const result = await monitor.testSend('status', 'channels', userId);
+  assert.match(result, /Teste: 1 enviados/);
+  assert.match(sent[1].content, /^\[TESTE/);
+  assert.match(sent[1].content, /Jogadores/);
+  advance(); store.update((s) => { s.testMessage = 'Settings {0} — user content'; });
+  await monitor.testSend('message', 'channels', userId);
+  assert.match(sent[2].content, /Settings \{0\} — user content/);
+});
