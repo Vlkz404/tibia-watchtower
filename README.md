@@ -70,3 +70,7 @@ npm test
 Tests use simulated objects to verify configuration validation, failure isolation, and delivery restrictions. For end-to-end validation, provide credentials, register commands, start the bot, and run `/ping` and `/status` in the server. The Tibia status to monitor, polling frequency, and alert conditions still need to be defined.
 
 References: [discord.js](https://discord.js.org/docs/packages/discord.js/14.28.1) and the [official Discord documentation](https://discord.com/developers/docs/quick-start/getting-started).
+
+## HTML monitoring
+
+The dashboard selects one player in Quelibra / Quelibra Pune. Character details use POST; the complete world online list determines online/offline. Endpoints and methods live in `config/tibia.js`. HTTP errors preserve the last state instead of generating offline alerts. Detected times are approximate; the first sample is silent. Last Login is optional and is not used alone to infer status.

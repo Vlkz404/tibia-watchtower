@@ -1,3 +1,5 @@
+import { characterName } from './tibia.js';
+import { statusText } from './monitor.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, MessageFlags, ModalBuilder, PermissionFlagsBits, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 export const canManage = (i, c) => i.user.id === c.ownerId || Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageGuild) || i.memberPermissions?.has(PermissionFlagsBits.ModerateMembers));
 const row = (...items) => new ActionRowBuilder().addComponents(...items);
@@ -16,7 +18,7 @@ export function renderDashboard(s, userId, manage, page = 'home', notice = '') {
     embed.setDescription(s.channelIds.map((id) => `<#${id}>`).join('\n') || 'No channels configured.');
     components.push(row(new ChannelSelectMenuBuilder().setCustomId('dash:channels').setPlaceholder('Choose notification channels').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(25)));
   } else if (page === 'monitor') {
-    embed.setDescription(`Player: ${s.player || 'not configured'}\nMonitoring: ${s.monitor.status}\n${s.monitor.error || 'Monitoring will be connected in the next step.'}`);
+    embed.setDescription(statusText(s));
     components.push(row(button('player', 'Choose player')));
   } else if (page === 'dm') {
     embed.setDescription(`Your subscription: ${s.subscribers.includes(userId) ? 'enabled' : 'disabled'}\nServer DMs: ${s.dmEnabled ? 'enabled' : 'disabled'}`);
@@ -53,9 +55,7 @@ export async function handleDashboard(i, { config, store, monitor }) {
       }
       store.update((s) => { s.channelIds = [...new Set(i.values)]; });
     } else if (action === 'player-submit') {
-      page = 'monitor'; let name = i.fields.getTextInputValue('value').trim();
-      if (name.startsWith('https://www.tibia.com/community/')) name = new URL(name).searchParams.get('name') || '';
-      if (!/^[a-zA-Z][a-zA-Z '\-]{1,28}$/.test(name)) throw new Error('Enter a valid player name or official character URL.');
+      page = 'monitor'; const name = characterName(i.fields.getTextInputValue('value'));
       store.update((s) => { s.player = name; s.monitor = { status: 'unknown', checkedAt: null, history: [], error: null }; s.monitorRevision++; });
     } else if (action === 'emoji-submit') {
       page = 'emojis'; const emoji = await i.guild.emojis.fetch(i.fields.getTextInputValue('value').trim());
