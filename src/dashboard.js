@@ -7,6 +7,7 @@ import { playerTarget, guildTarget } from './store.js';
 import { playerText, statusText, timestamp } from './monitor.js';
 import { icons, icon, iconText } from './icons.js';
 import { SecurityError } from './security.js';
+import { interactionErrorDetails } from './diagnostics.js';
 
 export const canTest = (i, c) => i.user.id === c.ownerId || Boolean(i.memberPermissions?.has(PermissionFlagsBits.Administrator));
 export const canManage = (i, c) => canTest(i, c) || Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageGuild) || i.memberPermissions?.has(PermissionFlagsBits.ModerateMembers));
@@ -47,7 +48,7 @@ export function renderDashboard(s, userId, manage, page = 'home', notice = '', a
       );
     const errors = [...s.players.filter((p) => p.monitor.error).map((p) => p.name), ...s.guilds.filter((g) => g.error).map((g) => g.name)];
     if (errors.length) embed.addFields({ name: 'Unavailable queries', value: errors.slice(0, 5).join(' · ') + (errors.length > 5 ? ` +${errors.length - 5}` : '') });
-    components.push(row(button('view:players', 'Players'), button('view:guilds', 'Guilds'), button('view:channels', 'Channels'), button('view:home', 'Refresh')));
+    components.push(row(button('view:players', 'Players'), button('view:guilds', 'Guilds'), button('view:channels', 'Channels'), button('refresh:home', 'Refresh')));
   } else if (section === 'notifications') {
     embed.setTitle('Notifications').setDescription(`General: **${on(s.notificationsEnabled)}**\nChannels: **${on(s.channelEnabled)}** · DMs: **${on(s.dmEnabled)}**`)
       .addFields({ name: 'Destinations', value: `${s.channelIds.length} channels · ${s.subscribers.length} DM subscriptions` });
@@ -85,7 +86,7 @@ export function renderDashboard(s, userId, manage, page = 'home', notice = '', a
     embed.setTitle(`${mark(target.monitor.status)} ${target.name}`).setDescription(playerText(target)).setURL(`https://www.tibia.com/community/?subtopic=characters&name=${encodeURIComponent(target.name)}`);
     const history = target.monitor.history.slice(-3).reverse();
     if (history.length) embed.addFields({ name: 'Latest changes', value: history.map((e) => `${mark(e.status)} ${e.status} · ${timestamp(e.at, 'R')}`).join('\n') });
-    components.push(row(button(`view:player:${id}`, 'Refresh'), button(`remove:players:${id}`, 'Remove player'), button('view:players', 'Back to list')));
+    components.push(row(button(`refresh:player:${id}`, 'Refresh'), button(`remove:players:${id}`, 'Remove player'), button('view:players', 'Back to list')));
   } else if (section === 'guild') {
     const guild = s.guilds.find((g) => g.id === id);
     if (!guild) return renderDashboard(s, userId, manage, 'guilds', 'Guild removed.', admin);
@@ -97,8 +98,8 @@ export function renderDashboard(s, userId, manage, page = 'home', notice = '', a
     if (guild.error) embed.addFields({ name: 'Query unavailable', value: `${guild.error} This list may be outdated.` });
     embed.setURL(`https://www.tibia.com/community/?subtopic=guilds&page=view&GuildName=${encodeURIComponent(guild.name)}`);
     components.push(row(button(`view:guild:${id}:0:all`, 'All', filter === 'all'), button(`view:guild:${id}:0:online`, 'Online', filter === 'online'), button(`view:guild:${id}:0:offline`, 'Offline', filter === 'offline')));
-    if (lastPage > 0) components.push(row(button(`view:guild:${id}:${Math.max(0, currentPage - 1)}:${filter}`, 'Previous').setDisabled(currentPage === 0), button(`view:guild:${id}:${Math.min(lastPage, currentPage + 1)}:${filter}`, 'Next').setDisabled(currentPage === lastPage)));
-    components.push(row(button(`view:guild:${id}:${currentPage}:${filter}`, `Refresh · ${currentPage + 1}/${lastPage + 1}`), button(`remove:guilds:${id}`, 'Remove guild'), button('view:guilds', 'Back to list')));
+    if (lastPage > 0) components.push(row(button(`previous:guild:${id}:${Math.max(0, currentPage - 1)}:${filter}`, 'Previous').setDisabled(currentPage === 0), button(`next:guild:${id}:${Math.min(lastPage, currentPage + 1)}:${filter}`, 'Next').setDisabled(currentPage === lastPage)));
+    components.push(row(button(`refresh:guild:${id}:${currentPage}:${filter}`, `Refresh · ${currentPage + 1}/${lastPage + 1}`), button(`remove:guilds:${id}`, 'Remove guild'), button('view:guilds', 'Back to list')));
   } else if (section === 'dm') {
     const subscribed = s.subscribers.includes(userId);
     embed.setTitle('My DMs').setDescription(`Your subscription: **${on(subscribed)}**\nServer alerts: **${on(s.notificationsEnabled && s.dmEnabled)}**\n\nYou control only your own DMs. Delivery depends on your Discord privacy settings.`);
@@ -172,7 +173,7 @@ export async function handleDashboard(i, { config, store, monitor }) {
     if (action === 'panic') {
       store.update((s) => { s.monitorEnabled = false; s.notificationsEnabled = false; s.channelEnabled = false; s.dmEnabled = false; s.monitorRevision++; });
       page = 'security'; notice = 'Monitoring and alerts disabled. Preferences, targets, and history preserved.';
-    } else if (verb === 'view' || verb === 'open') page = action.slice(verb.length + 1);
+    } else if (['view', 'open', 'refresh', 'previous', 'next'].includes(verb)) page = action.slice(verb.length + 1);
     else if (verb === 'select' && ['players', 'guilds'].includes(arg)) page = `${arg === 'players' ? 'player' : 'guild'}:${i.values[0]}`;
     else if (action === 'subscribe' || action === 'unsubscribe') { setSubscription(store, i.user.id, action === 'subscribe'); page = 'dm'; }
     else if (verb === 'add-submit') {
@@ -238,7 +239,7 @@ export async function handleDashboard(i, { config, store, monitor }) {
     else throw new TibiaError('Open /dashboard again; this button belongs to an earlier version.');
   } catch (error) {
     notice = error instanceof TibiaError || error instanceof SecurityError ? error.message : 'Could not save the change.';
-    if (!(error instanceof TibiaError)) console.error('Failed to execute dashboard action.');
+    if (!(error instanceof TibiaError)) console.error('Failed to execute dashboard action.', interactionErrorDetails(error));
   }
   await i.editReply(renderDashboard(store.get(), i.user.id, manage, page, notice, admin)); return true;
 }

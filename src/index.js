@@ -2,6 +2,7 @@ import { Client, Events, GatewayIntentBits, MessageFlags } from 'discord.js';
 import { chmodSync, existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ConfigError, loadConfig } from './config.js';
+import { interactionErrorDetails } from './diagnostics.js';
 import { Store } from './store.js';
 import { Monitor } from './monitor.js';
 import { acquireInstance, InstanceError } from './instance-lock.js';
@@ -63,8 +64,8 @@ try {
         if (action !== 'status') setSubscription(store, i.user.id, action === 'enable');
         await i.reply({ ...renderDashboard(store.get(), i.user.id, canManage(i, config), 'dm', '', canTest(i, config)), flags: MessageFlags.Ephemeral });
       } else if (['status', 'player'].includes(i.commandName)) await i.reply({ ...renderStatus(store.get(), i.options.getString('name')), flags: MessageFlags.Ephemeral });
-    } catch {
-      console.error('Failed to respond to interaction.');
+    } catch (error) {
+      console.error('Failed to respond to interaction.', interactionErrorDetails(error));
       try {
         const payload = { content: 'Could not complete the action. Open /dashboard again.', flags: MessageFlags.Ephemeral };
         if (i.deferred || i.replied) await i.followUp(payload); else await i.reply(payload);

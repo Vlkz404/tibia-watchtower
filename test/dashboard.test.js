@@ -168,3 +168,46 @@ test('an HTML interval modal is rejected after switching to TibiaData', async (t
   await handleDashboard(i, { config, store }); assert.equal(store.get().pollSeconds, 120);
   assert.match(i.response.embeds[0].toJSON().fields.find((f) => f.name === 'Result').value, /no manual adjustment/);
 });
+
+test('dashboard component IDs are unique across navigation, refresh, filters, and pagination', () => {
+  const settings = defaults();
+  settings.players = [playerTarget('Test Knight'), playerTarget('Other Knight')];
+  const guild = guildTarget('Test Guild');
+  guild.members = Array.from({ length: 81 }, (_, n) => ({ name: `Member ${n}`, status: n % 2 ? 'online' : 'offline', level: 100, vocation: 'Knight' }));
+  settings.guilds = [guild, guildTarget('Other Guild')];
+  const pages = ['home', 'notifications', 'channels', 'monitor', 'methods', 'players', 'guilds', 'dm', 'settings', 'security', 'emojis', 'tests', `player:${settings.players[0].id}`];
+  for (const filter of ['all', 'online', 'offline']) for (const page of [0, 1, 2, 4, 99]) pages.push(`guild:${guild.id}:${page}:${filter}`);
+  for (const source of ['html', 'tibiadata']) for (const admin of [false, true]) for (const page of pages) {
+    const view = renderDashboard({ ...settings, source }, userId, true, page, '', admin);
+    const ids = view.components.flatMap((r) => r.toJSON().components.map((c) => c.custom_id));
+    assert.equal(new Set(ids).size, ids.length, `${page}: repeated component ID`);
+    assert.ok(ids.every((id) => id.length <= 100));
+  }
+});
+
+test('refresh and pagination buttons keep the selected guild and filter', async (t) => {
+  const { store } = setup(t);
+  store.update((s) => {
+    const guild = guildTarget('Test Guild');
+    guild.members = Array.from({ length: 61 }, (_, n) => ({ name: `Member ${n}`, status: 'online', level: 100, vocation: 'Knight' }));
+    s.guilds = [guild];
+  });
+  const guild = store.get().guilds[0];
+  let page = `guild:${guild.id}:1:online`;
+  for (const [label, expectedPage] of [['Next', 3], ['Previous', 2], ['Refresh · 2/4', 2]]) {
+    const view = renderDashboard(store.get(), userId, true, page);
+    const control = view.components.flatMap((r) => r.toJSON().components).find((c) => c.label === label);
+    assert.ok(control, `Missing ${label}`);
+    const i = interaction(control.custom_id, [PermissionFlagsBits.ManageGuild]);
+    await handleDashboard(i, { store, config });
+    const expected = renderDashboard(store.get(), userId, true, `guild:${guild.id}:${expectedPage - 1}:online`);
+    assert.deepEqual(i.response.embeds[0].toJSON(), expected.embeds[0].toJSON());
+    assert.deepEqual(i.response.components.map((r) => r.toJSON()), expected.components.map((r) => r.toJSON()));
+    page = `guild:${guild.id}:${expectedPage - 1}:online`;
+  }
+  const home = renderDashboard(store.get(), userId, true);
+  const refresh = home.components.flatMap((r) => r.toJSON().components).find((c) => c.label === 'Refresh');
+  const i = interaction(refresh.custom_id, [PermissionFlagsBits.ManageGuild]);
+  await handleDashboard(i, { store, config });
+  assert.equal(i.response.embeds[0].toJSON().title, 'Tibia monitoring');
+});
