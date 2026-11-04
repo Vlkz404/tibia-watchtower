@@ -11,10 +11,13 @@
     "dev": "node --watch --env-file-if-exists=.env src/index.js",
     "check:env": "node --env-file-if-exists=.env src/check-env.js",
     "deploy:commands": "node --env-file-if-exists=.env src/deploy-commands.js",
-    "test": "node --test"
+    "test": "node --test",
+    "security:check": "node --env-file-if-exists=.env scripts/check-secrets.js",
+    "prepack": "npm run security:check"
   },
   "dependencies": {
     "cheerio": "1.2.0",
-    "discord.js": "14.28.1"
+    "discord.js": "14.28.1",
+    "proper-lockfile": "4.1.2"
   }
 }

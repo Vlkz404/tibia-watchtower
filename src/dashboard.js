@@ -6,6 +6,7 @@ import { characterName, guildName, TibiaError, sameName } from './tibia.js';
 import { playerTarget, guildTarget } from './store.js';
 import { playerText, statusText, timestamp } from './monitor.js';
 import { icons, icon, iconText } from './icons.js';
+import { SecurityError } from './security.js';
 
 export const canTest = (i, c) => i.user.id === c.ownerId || Boolean(i.memberPermissions?.has(PermissionFlagsBits.Administrator));
 export const canManage = (i, c) => canTest(i, c) || Boolean(i.memberPermissions?.has(PermissionFlagsBits.ManageGuild) || i.memberPermissions?.has(PermissionFlagsBits.ModerateMembers));
@@ -105,8 +106,11 @@ export function renderDashboard(s, userId, manage, page = 'home', notice = '', a
   } else if (section === 'settings') {
     embed.setTitle('Settings').setDescription('Server preferences.');
     const actions = [button('view:methods', 'Query method'), button('view:emojis', 'Emojis'), button('view:channels', 'Channels')];
-    if (admin) actions.push(button('view:tests', 'Delivery tests'));
+    if (admin) actions.push(button('view:tests', 'Delivery tests'), button('view:security', 'Security'));
     components.push(row(...actions));
+  } else if (section === 'security' && admin) {
+    embed.setTitle('Security').setDescription('The process uses an instance lock.\nCommands and deliveries have spam limits.\nCredentials are blocked in messages and saved data.\n\nEmergency stop disables monitoring, alerts, and DMs. To resume, enable the desired options under Monitoring and Alerts.');
+    components.push(row(button('panic', 'Stop monitoring and alerts').setStyle(ButtonStyle.Danger)));
   } else if (section === 'emojis') {
     embed.setTitle('Emojis').setDescription(Object.keys(icons).map((key) => `${iconText(s, key)} \`${key}\``).join('\n'));
     components.push(row(button('emoji', 'Customize'), button('reset-emojis', 'Restore defaults')));
@@ -143,8 +147,9 @@ export async function handleDashboard(i, { config, store, monitor }) {
   const manage = canManage(i, config); const admin = canTest(i, config);
   const personal = ['subscribe', 'unsubscribe'].includes(action) || action === 'view:dm';
   const testAction = verb === 'test' || action === 'view:tests' || action === 'test-message' || action === 'test-message-submit';
-  if ((!manage && !personal) || (testAction && !admin)) {
-    await i.reply({ content: testAction ? 'Action restricted to the owner or Administrator.' : 'Only the owner or moderators can change server settings.', flags: MessageFlags.Ephemeral }); return true;
+  const securityAction = action === 'panic' || action === 'view:security';
+  if ((!manage && !personal) || ((testAction || securityAction) && !admin)) {
+    await i.reply({ content: testAction || securityAction ? 'Action restricted to the owner or Administrator.' : 'Only the owner or moderators can change server settings.', flags: MessageFlags.Ephemeral }); return true;
   }
   const settings = store.get();
   if (verb === 'add') {
@@ -164,7 +169,10 @@ export async function handleDashboard(i, { config, store, monitor }) {
   if (update) await i.deferUpdate(); else await i.deferReply({ flags: MessageFlags.Ephemeral });
   let page = 'home'; let notice = '';
   try {
-    if (verb === 'view' || verb === 'open') page = action.slice(verb.length + 1);
+    if (action === 'panic') {
+      store.update((s) => { s.monitorEnabled = false; s.notificationsEnabled = false; s.channelEnabled = false; s.dmEnabled = false; s.monitorRevision++; });
+      page = 'security'; notice = 'Monitoring and alerts disabled. Preferences, targets, and history preserved.';
+    } else if (verb === 'view' || verb === 'open') page = action.slice(verb.length + 1);
     else if (verb === 'select' && ['players', 'guilds'].includes(arg)) page = `${arg === 'players' ? 'player' : 'guild'}:${i.values[0]}`;
     else if (action === 'subscribe' || action === 'unsubscribe') { setSubscription(store, i.user.id, action === 'subscribe'); page = 'dm'; }
     else if (verb === 'add-submit') {
@@ -229,7 +237,7 @@ export async function handleDashboard(i, { config, store, monitor }) {
     } else if (action === 'reset-emojis') { store.update((s) => { s.emojis = {}; }); page = 'emojis'; }
     else throw new TibiaError('Open /dashboard again; this button belongs to an earlier version.');
   } catch (error) {
-    notice = error instanceof TibiaError ? error.message : 'Could not save the change.';
+    notice = error instanceof TibiaError || error instanceof SecurityError ? error.message : 'Could not save the change.';
     if (!(error instanceof TibiaError)) console.error('Failed to execute dashboard action.');
   }
   await i.editReply(renderDashboard(store.get(), i.user.id, manage, page, notice, admin)); return true;

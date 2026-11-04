@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync } from '
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { tibiaSearch } from '../config/tibia.js';
+import { assertSafeText, SecurityError } from './security.js';
 
 export const emptyMonitor = () => ({ status: 'unknown', checkedAt: null, changedAt: null, lastLogin: null,
   lastOnline: null, lastOffline: null, error: null, history: [], source: null, observedAt: null });
@@ -53,8 +54,10 @@ export class Store {
     this.path = join(directory, 'settings.json');
     const raw = existsSync(this.path) ? JSON.parse(readFileSync(this.path, 'utf8')) : defaults();
     this.data = migrate(raw);
+    assertSafeText(JSON.stringify(this.data));
     validate(this.data);
     if (raw.version === 1) {
+      if (!this.canWrite()) throw new SecurityError('Writes blocked: instance is stopping or has no valid lock.');
       const backup = join(directory, 'settings.v1.backup.json');
       if (!existsSync(backup)) writeFileSync(backup, JSON.stringify(raw, null, 2), { mode: 0o600 });
     }
@@ -62,7 +65,9 @@ export class Store {
   }
   get() { return structuredClone(this.data); }
   update(change) {
+    if (!this.canWrite()) throw new SecurityError('Writes blocked: instance is stopping or has no valid lock.');
     const next = this.get(); change(next); validate(next);
+    assertSafeText(JSON.stringify(next));
     writeFileSync(`${this.path}.tmp`, JSON.stringify(next, null, 2), { mode: 0o600 });
     renameSync(`${this.path}.tmp`, this.path); this.data = next;
     return this.get();

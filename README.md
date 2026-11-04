@@ -13,3 +13,9 @@ Settings and the last 100 events per target persist in `data/settings.json`. v1 
 `npm test` verifies the implementation with simulated requests and deliveries. Live availability and cache freshness depend on the source; HTML requests may receive HTTP 403. Detection times are approximate. There is no persistent retry queue.
 
 Status and dashboard views use compact embeds, muted styling, clickable official character/guild titles, and a discreet `Made by VLKZ` footer.
+
+## Security
+
+Startup acquires a bot/host lock and a shared-data lock before login. Locks renew every 10s and expire after 30s without renewal. Detected lock loss stops deliveries and writes. Different hosts need a shared volume; a leaked token still requires revocation in Discord.
+
+Commands are limited per user and server, outbound deliveries are capped, credentials are rejected in messages and persisted data, and owner/admin users can stop monitoring and alerts under Settings → Security. Run `npm run security:check` before committing or packaging. This is protection against abuse of this bot, not a guarantee against a compromised host.
