@@ -1,24 +1,161 @@
+import { TibiaError } from './tibia.js';
 import { SearchService } from './search-service.js';
-import { lookupPlayer, TibiaError } from './tibia.js';
 import { sendNotification } from './notifications.js';
-export const timestamp = (value) => value ? `<t:${Math.floor(Date.parse(value) / 1000)}:F>` : 'not available';
-export function statusText(s) { return `Player: ${s.player || 'not configured'}\nStatus: ${s.monitor.status}\nLast successful query: ${timestamp(s.monitor.checkedAt)}\nLast Login: ${timestamp(s.monitor.lastLogin)}\n${s.monitor.error || 'Change times are approximate detections between queries.'}`; }
+import { iconText } from './icons.js';
+
+export const timestamp = (date, style = 'F') => date ? `<t:${Math.floor(new Date(date).getTime() / 1000)}:${style}>` : 'not recorded yet';
+
+export function applyObservation(previous, observation, now) {
+  if (previous.source === observation.source && previous.observedAt && observation.observedAt && Date.parse(observation.observedAt) <= Date.parse(previous.observedAt)) return { next: { ...previous, checkedAt: now, error: null }, event: null };
+  const sourceChanged = observation.source && previous.source !== observation.source;
+  const changed = previous.status !== 'unknown' && !sourceChanged && previous.status !== observation.status;
+  const event = changed ? { status: observation.status, from: previous.checkedAt, at: now, lastLogin: observation.lastLogin } : null;
+  const next = {
+    ...previous, status: observation.status, lastLogin: observation.lastLogin,
+    checkedAt: now, error: null,
+    source: observation.source || previous.source || null,
+    observedAt: observation.observedAt || null,
+    changedAt: event ? now : previous.changedAt,
+    // The first sample is a baseline, not a detected login or logout.
+    lastOnline: event?.status === 'online' ? now : previous.lastOnline,
+    lastOffline: event?.status === 'offline' ? now : previous.lastOffline,
+    history: event ? [...previous.history, event].slice(-100) : previous.history,
+  };
+  return { next, event };
+}
+
+export function playerText(target) {
+  const m = target.monitor;
+  return [
+    `**Status:** ${m.status === 'unknown' ? '⚪ no sample' : m.status === 'online' ? '🟢 online' : '🔴 offline'}`,
+    `**World / guild:** ${m.world || 'waiting for a query'} / ${m.guild || 'not provided'}`,
+    `**Checked:** ${timestamp(m.checkedAt)} ${m.checkedAt ? `(${timestamp(m.checkedAt, 'R')})` : ''}`,
+    `**Last Login:** ${m.lastLogin ? `${timestamp(m.lastLogin)} (${timestamp(m.lastLogin, 'R')})` : 'not provided'}`,
+    `**Login detected:** ${m.lastOnline ? timestamp(m.lastOnline) : 'no transition observed'}`,
+    `**Logout detected:** ${m.lastOffline ? timestamp(m.lastOffline) : 'no transition observed'}`,
+    m.observedAt ? `**Source sample:** ${timestamp(m.observedAt)}` : '',
+    m.error ? `⚠️ ${m.error} Last status may be outdated.` : '',
+    'Login/logout times are detections between queries, subject to source caching.',
+  ].filter(Boolean).join('\n');
+}
+export function statusText(settings) {
+  return [
+    `**Source:** ${settings.source === 'html' ? 'Official HTML' : 'TibiaData'}. Monitoring ${settings.monitorEnabled ? 'active' : 'paused'}.`,
+    `**Players:** ${settings.players.length} • **Guilds:** ${settings.guilds.length}`,
+    ...settings.players.slice(0, 10).map((p) => `${p.monitor.status === 'online' ? '🟢' : p.monitor.status === 'offline' ? '🔴' : '⚪'} **${p.name}**${p.monitor.error ? ' ⚠️ query unavailable' : ''}`),
+    ...settings.guilds.slice(0, 5).map((g) => `🏰 **${g.name}**: ${g.members.filter((m) => m.status === 'online').length} online / ${g.members.length} members${g.error ? ' ⚠️ query unavailable' : ''}`),
+    'Open /dashboard → Monitoring for details and full lists.',
+  ].join('\n');
+}
+
+export function applyGuildObservation(previous, observation, now) {
+  const comparable = previous.source === observation.source && previous.checkedAt;
+  if (comparable && previous.observedAt && observation.observedAt && Date.parse(observation.observedAt) <= Date.parse(previous.observedAt)) return { next: { ...previous, checkedAt: now, error: null }, events: [] };
+  const old = new Map(previous.members.map((m) => [m.name.toLowerCase(), m]));
+  const events = [];
+  const members = observation.members.map((m) => {
+    const prior = old.get(m.name.toLowerCase());
+    const changed = comparable && prior && prior.status !== m.status;
+    const event = changed ? { name: m.name, status: m.status, from: previous.checkedAt, at: now, guild: observation.name } : null;
+    if (event) events.push(event);
+    return { ...m, lastOnline: event?.status === 'online' ? now : prior?.lastOnline || null, lastOffline: event?.status === 'offline' ? now : prior?.lastOffline || null };
+  });
+  return { next: { ...previous, name: observation.name, world: observation.world, members, source: observation.source, observedAt: observation.observedAt, checkedAt: now, error: null, history: [...previous.history, ...events].slice(-100) }, events };
+}
+
 export class Monitor {
-  constructor(client, config, store, lookup = null, clock = Date.now) { Object.assign(this,{client,config,store,lookup,clock}); this.service = new SearchService(); this.lookup = lookup || ((name,s) => this.service.player(name,s.source || 'tibiadata')); this.lastAttempt = null; this.busy = false; this.stopped = false; }
-  start() { const tick = async () => { if (this.stopped) return; try { await this.check(); } catch { console.error('Monitoring failed.'); } if (!this.stopped) this.timer = setTimeout(tick,5000); }; void tick(); }
+  constructor(client, config, store, service = new SearchService(), clock = Date.now) {
+    Object.assign(this, { client, config, store, service, clock });
+    this.lastAttempt = new Map(); this.busy = false; this.stopped = false; this.testUntil = 0;
+  }
+  start() {
+    this.stopped = false;
+    const tick = async () => {
+      if (this.stopped) return;
+      try { await this.check(); } catch { console.error('Failed to persist or run monitoring.'); }
+      if (!this.stopped) this.timer = setTimeout(tick, 5000);
+    };
+    void tick();
+  }
   stop() { this.stopped = true; clearTimeout(this.timer); }
-  async check() {
+  current(settings) { const s = this.store.get(); return !this.stopped && s.monitorEnabled && s.monitorRevision === settings.monitorRevision && s.source === settings.source; }
+  due(kind, target, settings) {
+    const key = `${settings.source}:${kind}:${target.id}`;
+    const seconds = settings.source === 'tibiadata' ? (kind === 'guilds' ? 120 : 60) : settings.pollSeconds;
+    if (this.lastAttempt.has(key) && this.clock() - this.lastAttempt.get(key) < seconds * 1000) return false;
+    this.lastAttempt.set(key, this.clock()); return true;
+  }
+  deliveryConfig(active = true) {
     const s = this.store.get();
-    if (this.stopped || this.busy || !s.player || !s.monitorEnabled || (this.lastAttempt !== null && this.clock()-this.lastAttempt < (s.source === 'html' ? s.pollSeconds : 60)*1000)) return;
-    this.busy = true; this.lastAttempt = this.clock();
+    return { guildId: this.config.guildId, channelIds: active && s.notificationsEnabled && s.channelEnabled ? s.channelIds : [], dmEnabled: active && s.notificationsEnabled && s.dmEnabled, dmUserIds: s.subscribers };
+  }
+  async check() {
+    const settings = this.store.get();
+    if (this.busy || this.stopped) return 'Query running or bot shutting down.';
+    if (!settings.monitorEnabled) return 'Monitoring paused.';
+    if (!settings.players.length && !settings.guilds.length) return 'Add players or guilds.';
+    this.busy = true;
+    const pending = new Map(); const individual = new Set();
+    let checked = 0; let failures = 0;
     try {
-      const observation = await this.lookup(s.player,s); const current = this.store.get();
-      if (this.stopped || current.monitorRevision !== s.monitorRevision || !current.monitorEnabled) return;
-      const now = new Date(this.clock()).toISOString();
-      const changed = (!observation.source || current.monitor.source === observation.source) && current.monitor.status !== 'unknown' && current.monitor.status !== observation.status;
-      this.store.update((next) => { next.monitor = {...current.monitor,...observation,checkedAt:now,error:null,history:changed ? [...current.monitor.history,{status:observation.status,at:now,from:current.monitor.checkedAt}].slice(-100) : current.monitor.history}; });
-      if (changed && current.notificationsEnabled) await sendNotification(this.client,{guildId:this.config.guildId,channelIds:current.channelEnabled ? current.channelIds : [],dmEnabled:current.dmEnabled,dmUserIds:current.subscribers},`${observation.name}: ${observation.status}\nDetected: ${timestamp(now)}\nPrevious observation: ${timestamp(current.monitor.checkedAt)}`);
-    } catch(error) { if (!this.stopped && this.store.get().monitorRevision === s.monitorRevision) this.store.update((next) => { next.monitor.error = error instanceof TibiaError ? error.message : 'Query failed; last status preserved.'; }); }
-    finally { this.busy = false; }
+      for (const kind of ['players', 'guilds']) for (const target of settings[kind]) {
+        if (!this.current(settings)) return 'Method or monitoring changed; pending results discarded.';
+        if (!this.store.get()[kind].some((t) => t.id === target.id) || !this.due(kind, target, settings)) continue;
+        try {
+          const observation = await this.service[kind === 'players' ? 'player' : 'guild'](target.name, settings.source);
+          if (!this.current(settings) || !this.store.get()[kind].some((t) => t.id === target.id)) continue;
+          const now = new Date(this.clock()).toISOString();
+          let events = [];
+          this.store.update((s) => {
+            const index = s[kind].findIndex((t) => t.id === target.id);
+            if (kind === 'players') {
+              const { next, event } = applyObservation(s.players[index].monitor, observation, now);
+              s.players[index].monitor = { ...next, world: observation.world, guild: observation.guild };
+              individual.add(observation.name.toLowerCase());
+              if (event) events = [{ ...event, name: observation.name, world: observation.world, kind, id: target.id }];
+            } else {
+              const result = applyGuildObservation(s.guilds[index], observation, now);
+              s.guilds[index] = result.next;
+              events = result.events.filter((event) => !individual.has(event.name.toLowerCase())).map((event) => ({ ...event, world: observation.world, kind, id: target.id }));
+            }
+          });
+          for (const event of events) if (!pending.has(event.name.toLowerCase())) pending.set(event.name.toLowerCase(), event);
+          checked++;
+        } catch (error) {
+          failures++;
+          if (this.current(settings) && this.store.get()[kind].some((t) => t.id === target.id)) this.store.update((s) => {
+            const t = s[kind].find((t) => t.id === target.id);
+            (kind === 'players' ? t.monitor : t).error = error instanceof TibiaError ? error.message : 'Query failed; last status preserved.';
+          });
+        }
+      }
+      const latest = this.store.get();
+      const events = [...pending.values()].filter((event) => latest[event.kind].some((t) => t.id === event.id) && (event.status === 'online' ? latest.onlineAlerts : latest.offlineAlerts));
+      if (events.length && this.current(settings) && latest.notificationsEnabled) {
+        const lines = events.map((e) => `${iconText(latest, e.status)} **${e.name}** ${e.status} • ${e.guild || e.world} • detected ${timestamp(e.at, 't')}`);
+        let text = '**Changes detected in Tibia**\n'; let shown = 0;
+        for (const line of lines) { if (text.length + line.length > 1650) break; text += `${line}\n`; shown++; }
+        if (shown < lines.length) text += `+ ${lines.length - shown} changes; see dashboard history.\n`;
+        text += 'Approximate times between queries; data is subject to source caching.';
+        const current = () => this.deliveryConfig(this.current(settings));
+        const results = await sendNotification(this.client, current(), text, current);
+        if (this.current(settings)) this.store.update((s) => { s.delivery = { at: new Date(this.clock()).toISOString(), sent: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length }; });
+      }
+      this.service.prune?.();
+      const activeIds = new Set([...this.store.get().players, ...this.store.get().guilds].map((t) => t.id));
+      for (const key of this.lastAttempt.keys()) if (!activeIds.has(key.split(':').at(-1))) this.lastAttempt.delete(key);
+      return checked || failures ? `Queries completed: ${checked} valid, ${failures} failed.` : 'Cached data; waiting for the next source update.';
+    } finally { this.busy = false; }
+  }
+  async testSend(kind, destination, userId) {
+    if (this.stopped) throw new TibiaError('Bot shutting down; delivery blocked.');
+    if (this.clock() < this.testUntil) throw new TibiaError('Wait 30 seconds between delivery tests.');
+    const settings = this.store.get();
+    if (destination === 'channels' && !settings.channelIds.length) throw new TibiaError('Configure at least one channel before testing.');
+    this.testUntil = this.clock() + 30000;
+    const text = `[TEST — no actual status change]\n${kind === 'status' ? statusText(settings) : settings.testMessage}`.slice(0, 2000);
+    const current = () => ({ guildId: this.config.guildId, channelIds: !this.stopped && destination === 'channels' ? this.store.get().channelIds : [], dmEnabled: !this.stopped && destination === 'dm', dmUserIds: destination === 'dm' ? [userId] : [] });
+    const results = await sendNotification(this.client, current(), text, current);
+    return `Test: ${results.filter((r) => r.ok).length} sent, ${results.filter((r) => !r.ok).length} failed. ${destination === 'dm' ? 'The test DM was addressed only to you.' : ''}`;
   }
 }

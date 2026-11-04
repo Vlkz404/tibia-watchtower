@@ -1,9 +1,9 @@
-import { lookupApiPlayer } from './tibiadata.js';
 import { load } from 'cheerio';
 import { tibiaSearch } from '../config/tibia.js';
 
 import { TibiaError, normalize, sameName } from './tibia-common.js';
 import { requestBytes } from './search-request.js';
+import { lookupApiPlayer } from './tibiadata.js';
 export { TibiaError, normalize, sameName } from './tibia-common.js';
 export { buildRequest } from './search-request.js';
 
@@ -91,6 +91,49 @@ export async function lookupHtmlPlayer(name, settings, fetcher = fetch) {
 }
 
 export async function lookupPlayer(name, settings, fetcher = fetch) {
-  if ((settings.source || tibiaSearch.source) === 'tibiadata') return lookupApiPlayer(name, settings, fetcher);
-  return lookupHtmlPlayer(name, settings, fetcher);
+  const source = settings.source || tibiaSearch.source;
+  if (source === 'tibiadata') return lookupApiPlayer(name, settings, fetcher);
+  if (source === 'html') return lookupHtmlPlayer(name, settings, fetcher);
+  throw new TibiaError('Invalid search source in config/tibia.js.');
+}
+
+export function guildName(input) {
+  let name = input.trim();
+  if (/^https?:/i.test(name)) {
+    let url;
+    try { url = new URL(name); } catch { throw new TibiaError('Invalid guild URL.'); }
+    if (url.protocol !== 'https:' || url.hostname !== 'www.tibia.com' || url.port || url.username || url.password || url.pathname !== '/community/' || url.searchParams.get('subtopic') !== 'guilds') throw new TibiaError('Use the guild name or its official URL.');
+    name = url.searchParams.get('GuildName') || '';
+  }
+  name = normalize(name);
+  if (!/^[\p{L}\p{N} '\-]{2,80}$/u.test(name)) throw new TibiaError('Invalid guild name (2 to 80 characters).');
+  return name;
+}
+
+export function parseHtmlGuild(html, expected) {
+  const $ = load(html);
+  const name = normalize($('.BoxContent h1,.BoxContent h2').first().text());
+  const content = normalize($('.BoxContent').text());
+  const world = content.match(/guild was founded on (\w+) on /i)?.[1];
+  const container = $('.TableContainer').toArray().find((e) => normalize($(e).find('.CaptionContainer .Text').first().text()) === 'Guild Members');
+  if (!sameName(name, expected) || !world || !container || !/currently active/i.test(content)) throw new TibiaError('Guild missing, inactive, or HTML format changed.');
+  const header = $(container).find('tr').toArray().find((r) => $(r).children('td').last().text().trim() === 'Status');
+  if (!header) throw new TibiaError('Guild status column is missing.');
+  const members = [];
+  $(container).find('tr').each((_, row) => {
+    const link = $(row).find('a[href*="subtopic=characters"]');
+    const cells = $(row).children('td');
+    if (!link.length || cells.length > 6 || cells.length < 5) return;
+    const index = cells.toArray().findIndex((c) => $(c).find('a[href*="subtopic=characters"]').length === 1);
+    if (index < 0) return;
+    const suffix = cells.slice(index + 1);
+    const status = normalize(suffix.eq(3).text()).toLowerCase();
+    if (suffix.length !== 4 || !/^\d+$/.test(normalize(suffix.eq(1).text())) || !['', 'online', 'offline'].includes(status)) throw new TibiaError('Incomplete member row or unknown status.');
+    members.push({ name: normalize(link.text()), status: status || 'offline', level: Number(suffix.eq(1).text()), vocation: normalize(suffix.eq(0).text()), rank: index ? normalize(cells.first().text()) : '' });
+  });
+  if (!members.length || new Set(members.map((m) => m.name.toLowerCase())).size !== members.length) throw new TibiaError('Member list is missing or duplicated.');
+  return { name, world, members, source: 'html', observedAt: null };
+}
+export async function lookupHtmlGuild(name, fetcher = fetch) {
+  return parseHtmlGuild(await requestPage(tibiaSearch.guild, { guild: name }, fetcher), name);
 }

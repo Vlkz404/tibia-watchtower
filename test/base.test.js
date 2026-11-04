@@ -17,13 +17,20 @@ test('validates required fields without exposing the token', () => {
   });
   assert.throws(() => loadConfig({}), /DISCORD_TOKEN/);
   assert.throws(() => loadConfig({ ...env, DISCORD_OWNER_ID: '' }), /DISCORD_OWNER_ID/);
-
 });
 
-test('deliveries isolate failures and block mentions and channels from other servers', async () => {
+test('legacy environment preferences are not treated as consent', () => {
+  const config = loadConfig({ ...env, DISCORD_CHANNEL_IDS: '345678901234567890,345678901234567890' });
+  assert.equal(config.dmEnabled, undefined);
+  assert.equal(config.channelIds, undefined);
+  assert.equal(config.ownerId, env.DISCORD_OWNER_ID);
+});
+
+test('deliveries isolate failures and block mentions and foreign channels', async () => {
   const sent = [];
   const config = { guildId: env.DISCORD_GUILD_ID, channelIds: ['blocked', 'foreign', 'valid'], dmEnabled: true, dmUserIds: ['closed', 'open'] };
   const client = {
+    guilds: { fetch: async () => ({ members: { fetch: async () => ({}) } }) },
     channels: { fetch: async (id) => {
       if (id === 'blocked') throw new Error('Forbidden');
       return { guildId: id === 'foreign' ? 'another' : config.guildId, isSendable: () => true, send: async (payload) => sent.push(payload) };
@@ -33,12 +40,12 @@ test('deliveries isolate failures and block mentions and channels from other ser
       sent.push(payload);
     } }) },
   };
-  const results = await sendNotification(client, config, '@everyone test');
+  const results = await sendNotification(client, config, '@everyone teste');
   assert.deepEqual(results.map((item) => item.ok), [false, false, true, false, true]);
   assert.equal(sent.length, 2);
   for (const payload of sent) assert.deepEqual(payload.allowedMentions, { parse: [] });
   config.dmEnabled = false;
   config.channelIds = [];
-  assert.deepEqual(await sendNotification(client, config, 'test'), []);
+  assert.deepEqual(await sendNotification(client, config, 'teste'), []);
   await assert.rejects(() => sendNotification(client, config, 'x'.repeat(2001)));
 });

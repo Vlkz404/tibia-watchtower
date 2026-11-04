@@ -63,3 +63,13 @@ export async function lookupApiPlayer(name, settings, fetcher = fetch) {
   };
 }
 
+export function parseApiGuild(data, expected) {
+  const g = data?.guild;
+  if (!g || typeof g.name !== 'string' || !sameName(g.name, expected) || typeof g.world !== 'string' || !g.world) throw new TibiaError('Guild record is missing or unexpected.');
+  if (g.active !== true || !Array.isArray(g.members) || !Number.isInteger(g.members_total) || g.members.length !== g.members_total) throw new TibiaError('Inactive guild or incomplete member list.');
+  if (g.members.some((m) => typeof m.name !== 'string' || !m.name.trim() || !['online', 'offline'].includes(m.status))) throw new TibiaError('Member status is missing or invalid in TibiaData.');
+  if (new Set(g.members.map((m) => m.name.toLowerCase())).size !== g.members.length || g.members.filter((m) => m.status === 'online').length !== g.players_online) throw new TibiaError('Inconsistent member count.');
+  const observedAt = apiTimestamp(data.information?.timestamp, 'Sample time');
+  if (!observedAt || Date.now() - Date.parse(observedAt) > 600000 || Date.parse(observedAt) - Date.now() > 300000) throw new TibiaError('Guild sample has no valid timestamp or is outdated.');
+  return { name: g.name, world: g.world, members: g.members.map((m) => ({ name: normalize(m.name), status: m.status, level: m.level ?? null, vocation: m.vocation || '', rank: m.rank || '' })), source: 'tibiadata', observedAt };
+}

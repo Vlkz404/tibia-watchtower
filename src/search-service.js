@@ -1,6 +1,7 @@
 import { tibiaSearch } from '../config/tibia.js';
 import { TibiaError } from './tibia-common.js';
-import { lookupPlayer } from './tibia.js';
+import { lookupPlayer, lookupHtmlGuild } from './tibia.js';
+import { requestJson, parseApiGuild } from './tibiadata.js';
 
 // Per-resource TTLs and shared promises avoid duplicate requests within a cycle.
 export class SearchService {
@@ -31,6 +32,12 @@ export class SearchService {
     };
   }
   async player(name, source) { return lookupPlayer(name, { source }, this.cachedFetch(source)); }
+  async guild(name, source) {
+    const fetcher = this.cachedFetch(source);
+    if (source === 'html') return lookupHtmlGuild(name, fetcher);
+    if (source !== 'tibiadata') throw new TibiaError('Invalid source.');
+    return parseApiGuild(await requestJson(tibiaSearch.api.guild, { guild: name }, fetcher), name);
+  }
   // Prune expired targets to keep cache size bounded.
   prune() { for (const [key, entry] of this.cache) if (this.clock() >= entry.expires) this.cache.delete(key); }
 }
